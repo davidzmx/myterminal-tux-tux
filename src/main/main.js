@@ -142,18 +142,18 @@ function getDefaultConfig() {
     const ps = available.find(s => s.name.includes('PowerShell'));
     defaultShellPath = ps ? ps.path : (process.env.COMSPEC || 'powershell.exe');
   } else {
-    // En Linux por default SIEMPRE bash
+    // Linux: default to bash
     const bash = available.find(s => s.path === '/bin/bash' || s.path === '/usr/bin/bash' || s.name.toLowerCase() === 'bash');
     defaultShellPath = bash ? bash.path : (available[0]?.path || '/bin/bash');
   }
 
   return {
-    theme: 'dark', // 'dark' | 'light'
+    theme: 'dark',
     defaultShell: defaultShellPath,
     fontSize: 13,
     fontFamily: 'Consolas, "Fira Code", monospace',
     scrollback: 5000,
-    defaultDir: 'cwd', // 'cwd' | 'home'
+    defaultDir: 'cwd',
     gitActions: [
       { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
       { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
@@ -297,7 +297,10 @@ function createWindow() {
   mainWindow.on('closed', () => {
     for (const [id, item] of ptys.entries()) {
       try {
-        if (item.process) item.process.kill();
+        if (item.process) {
+          item.process.removeAllListeners();
+          item.process.kill();
+        }
       } catch (e) {}
     }
     ptys.clear();
@@ -360,10 +363,13 @@ function registerIpcHandlers() {
     });
 
     ptyProcess.onExit(({ exitCode, signal }) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(`terminal:exit:${id}`, { exitCode, signal });
+      const current = ptys.get(id);
+      if (current && current.process === ptyProcess) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(`terminal:exit:${id}`, { exitCode, signal });
+        }
+        ptys.delete(id);
       }
-      ptys.delete(id);
     });
 
     if (initialCommand) {
@@ -377,13 +383,15 @@ function registerIpcHandlers() {
     return { id, shellPath: targetShell, cwd: workingDir };
   });
 
-  // PTY: Switch shell
+  // PTY: Switch shell safely without breaking listeners or killing new process
   ipcMain.handle('terminal:switch-shell', async (event, { id, shellPath, cols = 80, rows = 24 }) => {
     const existing = ptys.get(id);
     const cwd = getPtyCwd(id);
 
     if (existing && existing.process) {
       try {
+        // Disarm old process exit listener before killing so it doesn't delete the new entry
+        existing.process.removeAllListeners('exit');
         existing.process.kill();
       } catch (e) {}
     }
@@ -413,10 +421,13 @@ function registerIpcHandlers() {
     });
 
     ptyProcess.onExit(({ exitCode, signal }) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(`terminal:exit:${id}`, { exitCode, signal });
+      const current = ptys.get(id);
+      if (current && current.process === ptyProcess) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(`terminal:exit:${id}`, { exitCode, signal });
+        }
+        ptys.delete(id);
       }
-      ptys.delete(id);
     });
 
     return { id, shellPath, cwd };
@@ -430,6 +441,8 @@ function registerIpcHandlers() {
       } catch (err) {
         console.error(`Error writing to terminal ${id}:`, err);
       }
+    } else {
+      console.warn(`Attempted write to non-existent or dead terminal: ${id}`);
     }
   });
 
@@ -446,6 +459,7 @@ function registerIpcHandlers() {
     const item = ptys.get(id);
     if (item && item.process) {
       try {
+        item.process.removeAllListeners();
         item.process.kill();
       } catch (err) {}
       ptys.delete(id);
@@ -471,7 +485,7 @@ function registerIpcHandlers() {
     }
   });
 
-  // SSH Profiles
+  // SSH Profiles (with password support)
   ipcMain.handle('profiles:get', () => {
     return loadJsonFile('ssh-profiles.json', [
       {
@@ -481,7 +495,9 @@ function registerIpcHandlers() {
         port: 22,
         username: os.userInfo().username || 'user',
         authType: 'password',
+        password: '',
         keyPath: '',
+        passphrase: '',
         extraArgs: ''
       }
     ]);

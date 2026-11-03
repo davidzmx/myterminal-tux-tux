@@ -4,7 +4,7 @@
   "description": "Multiplatform terminal emulator with Terminator-style splits, tabs, Git integration, SSH profiles and session persistence",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "dist:linux": "electron-builder --linux AppImage deb",
     "dist:linux:portable": "electron-builder --linux AppImage",
     "dist:win": "electron-builder --win portable nsis",

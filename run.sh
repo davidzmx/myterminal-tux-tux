@@ -4,5 +4,5 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
 echo "🐧 Iniciando MyTerminal Tux Tux..."
-npx electron . "$@"
-
+unset ELECTRON_RUN_AS_NODE
+exec ./node_modules/.bin/electron . "$@"

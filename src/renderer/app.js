@@ -49,6 +49,7 @@ class TuxTerminalApp {
     this.modalSession = document.getElementById('modal-session');
     this.modalTabLayout = document.getElementById('modal-tab-layout');
     this.modalGitUser = document.getElementById('modal-git-user');
+    this.modalEditGitAction = document.getElementById('modal-edit-git-action');
 
     // Settings Modal elements
     this.cfgThemeSelect = document.getElementById('cfg-theme');
@@ -60,11 +61,21 @@ class TuxTerminalApp {
     this.generalConfigForm = document.getElementById('general-config-form');
     this.gitActionsListEl = document.getElementById('git-actions-list');
 
+    // Edit Single Git Action Form
+    this.editGitActionForm = document.getElementById('edit-git-action-form');
+    this.editGitActionIdInput = document.getElementById('edit-git-action-id');
+    this.editGitActionLabelInput = document.getElementById('edit-git-action-label');
+    this.editGitActionCmdInput = document.getElementById('edit-git-action-cmd');
+
     // SSH Form elements
     this.sshForm = document.getElementById('ssh-profile-form');
     this.sshProfilesListEl = document.getElementById('ssh-profiles-list');
     this.sshAuthTypeSelect = document.getElementById('ssh-auth-type');
+    this.sshPasswordGroup = document.getElementById('group-ssh-password');
     this.sshKeyGroup = document.getElementById('group-ssh-key');
+    this.sshPassphraseGroup = document.getElementById('group-ssh-passphrase');
+    this.btnToggleSshPwd = document.getElementById('btn-toggle-ssh-pwd');
+    this.btnToggleSshPhrase = document.getElementById('btn-toggle-ssh-phrase');
     this.btnSshDelete = document.getElementById('btn-ssh-delete');
     this.btnSshConnectActive = document.getElementById('btn-ssh-connect-active');
 
@@ -87,7 +98,6 @@ class TuxTerminalApp {
       this.availableShells = [{ name: 'Bash', path: '/bin/bash' }];
     }
 
-    // Apply configured theme
     this.applyTheme(this.config.theme || 'dark');
 
     try {
@@ -128,7 +138,6 @@ class TuxTerminalApp {
       this.themeText.textContent = 'Oscuro';
     }
 
-    // Update active xterm themes
     const xtermTheme = this.getXtermTheme(theme);
     for (const item of this.terminals.values()) {
       if (item.term) {
@@ -179,22 +188,18 @@ class TuxTerminalApp {
   }
 
   bindGlobalEvents() {
-    // Quick Theme Toggle button
     this.btnThemeToggle.addEventListener('click', () => {
       this.toggleTheme();
     });
 
-    // Settings Modal button
     document.getElementById('btn-settings').addEventListener('click', () => {
       this.openSettingsModal();
     });
 
-    // New tab button
     this.btnNewTab.addEventListener('click', () => {
       this.createTab(`Pestaña ${this.tabs.length + 1}`);
     });
 
-    // Top action buttons
     document.getElementById('btn-ssh-manager').addEventListener('click', () => {
       this.openSshModal();
     });
@@ -207,7 +212,6 @@ class TuxTerminalApp {
       this.openTabLayoutModal();
     });
 
-    // Close buttons on modals
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const modalId = btn.getAttribute('data-close-modal');
@@ -215,14 +219,12 @@ class TuxTerminalApp {
       });
     });
 
-    // Close modals on backdrop click
     document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
         e.target.closest('.modal').classList.add('hidden');
       });
     });
 
-    // Settings Navigation Tabs
     document.querySelectorAll('.settings-nav-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.settings-nav-btn').forEach((b) => b.classList.remove('active'));
@@ -233,13 +235,11 @@ class TuxTerminalApp {
       });
     });
 
-    // General Config form submit
     this.generalConfigForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.saveGeneralConfig();
     });
 
-    // Git Actions config buttons
     document.getElementById('btn-add-git-action').addEventListener('click', () => {
       this.addNewGitAction();
     });
@@ -254,9 +254,40 @@ class TuxTerminalApp {
       await this.saveGitActionsConfig();
     });
 
+    // Single Git Action form submit
+    this.editGitActionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const actionId = this.editGitActionIdInput.value;
+      const newLabel = this.editGitActionLabelInput.value.trim();
+      const newCmd = this.editGitActionCmdInput.value.trim();
+
+      const action = this.config.gitActions.find((a) => a.id === actionId);
+      if (action) {
+        action.label = newLabel;
+        action.cmd = newCmd;
+        await window.api.saveConfig(this.config);
+        this.refreshAllGitToolbars();
+      }
+      this.modalEditGitAction.classList.add('hidden');
+    });
+
     // SSH form auth type toggle
     this.sshAuthTypeSelect.addEventListener('change', (e) => {
-      this.sshKeyGroup.style.display = e.target.value === 'key' ? 'block' : 'none';
+      const isKey = e.target.value === 'key';
+      this.sshKeyGroup.style.display = isKey ? 'block' : 'none';
+      this.sshPassphraseGroup.style.display = isKey ? 'block' : 'none';
+      this.sshPasswordGroup.style.display = isKey ? 'none' : 'block';
+    });
+
+    // Toggle password visibility buttons
+    this.btnToggleSshPwd.addEventListener('click', () => {
+      const pwdInput = document.getElementById('ssh-password');
+      pwdInput.type = pwdInput.type === 'password' ? 'text' : 'password';
+    });
+
+    this.btnToggleSshPhrase.addEventListener('click', () => {
+      const phraseInput = document.getElementById('ssh-passphrase');
+      phraseInput.type = phraseInput.type === 'password' ? 'text' : 'password';
     });
 
     this.sshForm.addEventListener('submit', (e) => {
@@ -290,7 +321,6 @@ class TuxTerminalApp {
       this.handleSaveTabTemplate();
     });
 
-    // Git user form submit
     this.gitUserForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const termId = this.gitTargetTermId || this.activeTerminalId;
@@ -304,7 +334,6 @@ class TuxTerminalApp {
       this.refreshGitInfo(termId);
     });
 
-    // Hide dropdowns and context menu on global click
     document.addEventListener('click', (e) => {
       if (!this.contextMenu.contains(e.target)) {
         this.hideContextMenu();
@@ -317,7 +346,6 @@ class TuxTerminalApp {
       }
     });
 
-    // Context menu actions
     this.contextMenu.addEventListener('click', (e) => {
       const item = e.target.closest('.menu-item');
       if (!item || item.classList.contains('has-submenu')) return;
@@ -350,7 +378,7 @@ class TuxTerminalApp {
       }
     });
 
-    // Keyboard Shortcuts (Terminator style)
+    // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.shiftKey) {
         if (e.key === 'T' || e.key === 't') {
@@ -378,7 +406,6 @@ class TuxTerminalApp {
     this.cfgFontFamilyInput.value = this.config.fontFamily || "Consolas, 'Fira Code', monospace";
     this.cfgScrollbackInput.value = this.config.scrollback || 5000;
 
-    // Populate Default Shell in settings
     this.cfgDefaultShellSelect.innerHTML = '';
     this.availableShells.forEach((sh) => {
       const opt = document.createElement('option');
@@ -404,7 +431,6 @@ class TuxTerminalApp {
 
     this.applyTheme(this.config.theme);
 
-    // Apply font size / options to live terminals
     for (const item of this.terminals.values()) {
       if (item.term) {
         item.term.options.fontSize = this.config.fontSize;
@@ -426,37 +452,27 @@ class TuxTerminalApp {
       const row = document.createElement('div');
       row.className = 'git-action-config-row';
 
-      // Enable checkbox
       const chk = document.createElement('input');
       chk.type = 'checkbox';
       chk.className = 'git-action-enable';
       chk.checked = act.enabled !== false;
       chk.title = 'Mostrar botón en la barra';
-      chk.dataset.index = index;
-      chk.dataset.field = 'enabled';
 
-      // Label input
       const inputLabel = document.createElement('input');
       inputLabel.type = 'text';
       inputLabel.className = 'git-action-input-label';
       inputLabel.value = act.label || '';
       inputLabel.placeholder = 'Etiqueta';
-      inputLabel.dataset.index = index;
-      inputLabel.dataset.field = 'label';
 
-      // Command input
       const inputCmd = document.createElement('input');
       inputCmd.type = 'text';
       inputCmd.className = 'git-action-input-cmd';
       inputCmd.value = act.cmd || (act.action === 'user-git' ? '(Acción: Cambiar usuario)' : '');
-      inputCmd.placeholder = 'Comando git (ej: git status)';
-      inputCmd.dataset.index = index;
-      inputCmd.dataset.field = 'cmd';
+      inputCmd.placeholder = 'Comando git exacto';
       if (act.action === 'user-git') {
         inputCmd.readOnly = true;
       }
 
-      // Delete action button
       const btnDel = document.createElement('button');
       btnDel.type = 'button';
       btnDel.className = 'btn btn-sm btn-danger';
@@ -493,11 +509,11 @@ class TuxTerminalApp {
       { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
       { id: 'act-unstage', label: 'Unstage', cmd: 'git reset', enabled: true },
       { id: 'act-commit', label: 'Commit', cmd: 'git commit -m "{prompt:Mensaje de commit}"', enabled: true },
-      { id: 'push', label: 'Push', cmd: 'git push', enabled: true },
-      { id: 'pull', label: 'Pull', cmd: 'git pull', enabled: true },
-      { id: 'fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
-      { id: 'diff', label: 'Diff', cmd: 'git diff', enabled: true },
-      { id: 'log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
+      { id: 'act-push', label: 'Push', cmd: 'git push', enabled: true },
+      { id: 'act-pull', label: 'Pull', cmd: 'git pull', enabled: true },
+      { id: 'act-fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
+      { id: 'act-diff', label: 'Diff', cmd: 'git diff', enabled: true },
+      { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
       { id: 'act-user', label: 'user Git', action: 'user-git', enabled: true }
     ];
     this.config.gitActions = defaults;
@@ -538,6 +554,19 @@ class TuxTerminalApp {
         this.renderTerminalGitActions(gitActionsEl, termId);
       }
     }
+  }
+
+  openEditSingleGitActionModal(act) {
+    this.editGitActionIdInput.value = act.id;
+    this.editGitActionLabelInput.value = act.label;
+    this.editGitActionCmdInput.value = act.cmd || '';
+    if (act.action === 'user-git') {
+      this.editGitActionCmdInput.readOnly = true;
+      this.editGitActionCmdInput.value = '(Abre ventana de usuario Git)';
+    } else {
+      this.editGitActionCmdInput.readOnly = false;
+    }
+    this.modalEditGitAction.classList.remove('hidden');
   }
 
   // ================= TABS MANAGEMENT =================
@@ -741,7 +770,7 @@ class TuxTerminalApp {
     splitterEl.addEventListener('pointerdown', onPointerDown);
   }
 
-  // ================= TERMINAL TOOLBAR (MATCHING USER IMAGES) =================
+  // ================= TERMINAL TOOLBAR =================
   createTerminalPaneDom(node, tabId) {
     const pane = document.createElement('div');
     pane.className = `terminal-pane ${this.activeTerminalId === node.id ? 'active-pane' : ''}`;
@@ -752,7 +781,6 @@ class TuxTerminalApp {
     header.className = 'terminal-header';
     header.id = `header-${node.id}`;
 
-    // Left toolbar group
     const leftGroup = document.createElement('div');
     leftGroup.className = 'tb-left-group';
 
@@ -761,7 +789,7 @@ class TuxTerminalApp {
     termLabel.className = 'tb-label';
     termLabel.textContent = 'Terminal';
 
-    // 2. Shell dropdown select (Bash, Dash, PowerShell, etc.)
+    // 2. Shell dropdown select
     const shellSelect = document.createElement('select');
     shellSelect.className = 'tb-shell-select';
     shellSelect.id = `shell-select-${node.id}`;
@@ -907,6 +935,8 @@ class TuxTerminalApp {
     });
 
     pane.addEventListener('contextmenu', (e) => {
+      // Don't intercept right click if target is a git button
+      if (e.target.closest('.tb-git-action-btn')) return;
       e.preventDefault();
       this.showContextMenu(e.clientX, e.clientY, node.id);
     });
@@ -924,8 +954,9 @@ class TuxTerminalApp {
       const btn = document.createElement('button');
       btn.className = 'tb-git-action-btn';
       btn.textContent = act.label;
-      btn.title = act.cmd || act.label;
+      btn.title = `${act.cmd || act.label} (Click derecho: Editar comando)`;
 
+      // Left Click: Execute command
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.setActiveTerminal(termId);
@@ -937,18 +968,24 @@ class TuxTerminalApp {
 
         if (act.cmd) {
           let command = act.cmd;
-          // Check for prompt placeholder: {prompt:Prompt Message}
           const promptMatch = command.match(/\{prompt(?::([^}]+))?\}/);
           if (promptMatch) {
             const promptMsg = promptMatch[1] || 'Ingresa el valor:';
             const userVal = prompt(promptMsg);
-            if (userVal === null) return; // User cancelled
+            if (userVal === null) return;
             command = command.replace(promptMatch[0], userVal.replace(/"/g, '\\"'));
           }
 
           window.api.writeTerminal(termId, `${command}\r`);
           setTimeout(() => this.refreshGitInfo(termId), 500);
         }
+      });
+
+      // Right Click: Edit this button's command directly!
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openEditSingleGitActionModal(act);
       });
 
       containerEl.appendChild(btn);
@@ -975,7 +1012,9 @@ class TuxTerminalApp {
     const inst = this.terminals.get(termId);
     if (!inst) return;
 
+    this.setActiveTerminal(termId);
     inst.shellPath = newShellPath;
+
     if (inst.term) {
       inst.term.clear();
       inst.term.write(`\r\n\x1b[36mCambiando shell a: ${newShellPath}...\x1b[0m\r\n\r\n`);
@@ -983,7 +1022,10 @@ class TuxTerminalApp {
 
     try {
       await window.api.switchTerminalShell(termId, newShellPath, inst.term?.cols || 80, inst.term?.rows || 24);
-      this.refreshGitInfo(termId);
+      setTimeout(() => {
+        this.refreshGitInfo(termId);
+        if (inst.term) inst.term.focus();
+      }, 150);
     } catch (e) {
       console.error('Error switching shell:', e);
     }
@@ -1168,7 +1210,8 @@ class TuxTerminalApp {
         unsubData,
         unsubExit,
         title: node.title || 'Terminal',
-        gitInfo: null
+        gitInfo: null,
+        sshPwdListener: null
       };
 
       this.terminals.set(node.id, termInfo);
@@ -1307,6 +1350,7 @@ class TuxTerminalApp {
     if (inst) {
       if (inst.unsubData) inst.unsubData();
       if (inst.unsubExit) inst.unsubExit();
+      if (inst.sshPwdListener) inst.sshPwdListener();
       window.api.killTerminal(termId);
       if (inst.term) inst.term.dispose();
       this.terminals.delete(termId);
@@ -1363,7 +1407,76 @@ class TuxTerminalApp {
     window.api.writeTerminal(termId, 'clear\r');
   }
 
-  // ================= SSH PROFILES =================
+  // ================= SSH PROFILES & PASSWORD AUTO-INJECTION =================
+  setupSshPasswordAutoInjector(termId, secret) {
+    const inst = this.terminals.get(termId);
+    if (!inst) return;
+
+    if (inst.sshPwdListener) {
+      inst.sshPwdListener();
+      inst.sshPwdListener = null;
+    }
+
+    let buffer = '';
+    let answered = false;
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+    }, 30000); // 30s timeout
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (inst.sshPwdListener) {
+        inst.sshPwdListener();
+        inst.sshPwdListener = null;
+      }
+    };
+
+    const unsub = window.api.onTerminalData(termId, (data) => {
+      buffer += data;
+      // Match password / passphrase prompts
+      const isPrompt = /(password|passphrase|contraseña|password for [^:]+):\s*$/i.test(buffer.trim());
+      if (isPrompt && !answered) {
+        answered = true;
+        setTimeout(() => {
+          window.api.writeTerminal(termId, `${secret}\r`);
+          cleanup();
+        }, 120);
+      }
+    });
+
+    inst.sshPwdListener = () => {
+      unsub();
+    };
+  }
+
+  connectSshProfile(termId, profile) {
+    let sshCmd = 'ssh';
+    if (profile.port && Number(profile.port) !== 22) {
+      sshCmd += ` -p ${profile.port}`;
+    }
+    if (profile.authType === 'key' && profile.keyPath) {
+      sshCmd += ` -i "${profile.keyPath}"`;
+    }
+    if (profile.extraArgs) {
+      sshCmd += ` ${profile.extraArgs}`;
+    }
+    sshCmd += ` ${profile.username}@${profile.host}`;
+
+    const secretToSend = profile.authType === 'key' ? (profile.passphrase || '') : (profile.password || '');
+    if (secretToSend) {
+      this.setupSshPasswordAutoInjector(termId, secretToSend);
+    }
+
+    window.api.writeTerminal(termId, `${sshCmd}\r`);
+
+    const inst = this.terminals.get(termId);
+    if (inst) {
+      inst.title = `SSH: ${profile.name}`;
+    }
+    this.updateStatusBar();
+  }
+
   populateSshDropdown(menuEl, targetTermId) {
     menuEl.innerHTML = '';
     if (this.profiles.length === 0) {
@@ -1396,28 +1509,6 @@ class TuxTerminalApp {
     menuEl.appendChild(manageItem);
   }
 
-  connectSshProfile(termId, profile) {
-    let sshCmd = 'ssh';
-    if (profile.port && Number(profile.port) !== 22) {
-      sshCmd += ` -p ${profile.port}`;
-    }
-    if (profile.authType === 'key' && profile.keyPath) {
-      sshCmd += ` -i "${profile.keyPath}"`;
-    }
-    if (profile.extraArgs) {
-      sshCmd += ` ${profile.extraArgs}`;
-    }
-    sshCmd += ` ${profile.username}@${profile.host}`;
-
-    window.api.writeTerminal(termId, `${sshCmd}\r`);
-
-    const inst = this.terminals.get(termId);
-    if (inst) {
-      inst.title = `SSH: ${profile.name}`;
-    }
-    this.updateStatusBar();
-  }
-
   openSshModal() {
     this.renderSshProfilesList();
     this.clearSshForm();
@@ -1429,8 +1520,9 @@ class TuxTerminalApp {
     this.profiles.forEach((p) => {
       const card = document.createElement('div');
       card.className = 'profile-card';
+      const hasPwd = Boolean(p.password || p.passphrase);
       card.innerHTML = `
-        <div class="profile-card-name">${p.name}</div>
+        <div class="profile-card-name">${p.name} ${hasPwd ? '🔒' : ''}</div>
         <div class="profile-card-details">${p.username}@${p.host}:${p.port || 22}</div>
       `;
       card.addEventListener('click', () => {
@@ -1450,9 +1542,15 @@ class TuxTerminalApp {
     document.getElementById('ssh-port').value = '22';
     document.getElementById('ssh-username').value = '';
     document.getElementById('ssh-auth-type').value = 'password';
+    document.getElementById('ssh-password').value = '';
+    document.getElementById('ssh-password').type = 'password';
     document.getElementById('ssh-key-path').value = '';
+    document.getElementById('ssh-passphrase').value = '';
+    document.getElementById('ssh-passphrase').type = 'password';
     document.getElementById('ssh-extra-args').value = '';
     this.sshKeyGroup.style.display = 'none';
+    this.sshPassphraseGroup.style.display = 'none';
+    this.sshPasswordGroup.style.display = 'block';
     this.btnSshDelete.classList.add('hidden');
     document.querySelectorAll('.profile-card').forEach((c) => c.classList.remove('active'));
   }
@@ -1465,9 +1563,16 @@ class TuxTerminalApp {
     document.getElementById('ssh-port').value = p.port || 22;
     document.getElementById('ssh-username').value = p.username;
     document.getElementById('ssh-auth-type').value = p.authType || 'password';
+    document.getElementById('ssh-password').value = p.password || '';
     document.getElementById('ssh-key-path').value = p.keyPath || '';
+    document.getElementById('ssh-passphrase').value = p.passphrase || '';
     document.getElementById('ssh-extra-args').value = p.extraArgs || '';
-    this.sshKeyGroup.style.display = p.authType === 'key' ? 'block' : 'none';
+
+    const isKey = (p.authType || 'password') === 'key';
+    this.sshKeyGroup.style.display = isKey ? 'block' : 'none';
+    this.sshPassphraseGroup.style.display = isKey ? 'block' : 'none';
+    this.sshPasswordGroup.style.display = isKey ? 'none' : 'block';
+
     this.btnSshDelete.classList.remove('hidden');
   }
 
@@ -1484,7 +1589,9 @@ class TuxTerminalApp {
       port: parseInt(document.getElementById('ssh-port').value, 10) || 22,
       username,
       authType: document.getElementById('ssh-auth-type').value,
+      password: document.getElementById('ssh-password').value,
       keyPath: document.getElementById('ssh-key-path').value.trim(),
+      passphrase: document.getElementById('ssh-passphrase').value,
       extraArgs: document.getElementById('ssh-extra-args').value.trim()
     };
   }

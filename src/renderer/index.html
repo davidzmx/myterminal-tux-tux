@@ -57,7 +57,7 @@
         <span id="active-term-info">Terminal activa: Ninguna</span>
       </div>
       <div class="shortcuts-hint">
-        <span>Click derecho: <b>Menú Dividir / SSH</b> • Ctrl+Shift+O (H) • Ctrl+Shift+E (V) • Ctrl+Shift+T (Pestaña)</span>
+        <span>Click derecho: <b>Menú Dividir / SSH</b> • Click derecho en botones Git: <b>Editar comando</b></span>
       </div>
     </footer>
   </div>
@@ -91,6 +91,37 @@
     </div>
   </div>
 
+  <!-- Modal: Edit Single Git Action Command (Quick edit on right-click) -->
+  <div id="modal-edit-git-action" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">✏️</span> Configurar Comando del Botón Git
+        </div>
+        <button class="modal-close" data-close-modal="modal-edit-git-action">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-git-action-form">
+          <input type="hidden" id="edit-git-action-id" value="">
+          <div class="form-group">
+            <label for="edit-git-action-label">Nombre / Etiqueta del Botón</label>
+            <input type="text" id="edit-git-action-label" required placeholder="Ej. Status, Push, Stash...">
+          </div>
+          <div class="form-group">
+            <label for="edit-git-action-cmd">Comando Git a Ejecutar</label>
+            <input type="text" id="edit-git-action-cmd" required placeholder="Ej. git status, git push origin, git stash...">
+            <small class="form-hint">Tip: Usa <code>{prompt:Tu pregunta}</code> si quieres que te pida un texto antes de ejecutarlo (como un mensaje de commit).</small>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" data-close-modal="modal-edit-git-action">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: General Settings & Git Actions Config -->
   <div id="modal-settings" class="modal hidden">
     <div class="modal-backdrop"></div>
@@ -102,7 +133,6 @@
         <button class="modal-close" data-close-modal="modal-settings">&times;</button>
       </div>
       <div class="modal-body settings-layout">
-        <!-- Settings tabs: General vs Git Actions -->
         <div class="settings-nav">
           <button class="settings-nav-btn active" data-settings-tab="tab-general-opts">General & Terminal</button>
           <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Botones de Acciones Git</button>
@@ -159,7 +189,10 @@
         <!-- Section 2: Git Actions Options -->
         <div id="tab-git-opts" class="settings-tab-pane">
           <div class="git-actions-header">
-            <p class="modal-subtitle">Configura qué botones de comandos Git aparecen en la barra de cada terminal y qué acción ejecutan.</p>
+            <div>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Edita las etiquetas, comandos y visibilidad de los botones de Git en la barra superior.</p>
+              <small class="form-hint" style="margin-top:0;">Tip: Usa <code>{prompt:Pregunta}</code> para pedir texto interactivo antes de ejecutar.</small>
+            </div>
             <div class="git-actions-top-btns">
               <button id="btn-add-git-action" class="btn btn-sm btn-primary">+ Nueva Acción</button>
               <button id="btn-reset-git-actions" class="btn btn-sm">↺ Restaurar Predeterminados</button>
@@ -207,7 +240,7 @@
     </div>
   </div>
 
-  <!-- Modal: SSH Profiles Manager -->
+  <!-- Modal: SSH Profiles Manager (with Password and Passphrase storage) -->
   <div id="modal-ssh" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-dialog modal-lg">
@@ -255,14 +288,32 @@
             <div class="form-group">
               <label for="ssh-auth-type">Método de Autenticación</label>
               <select id="ssh-auth-type">
-                <option value="password">Contraseña (Interactiva)</option>
+                <option value="password">Contraseña (Guardada y Autoconectable)</option>
                 <option value="key">Llave Privada (.pem / .id_rsa)</option>
               </select>
             </div>
 
+            <!-- Password field with eye toggle -->
+            <div class="form-group" id="group-ssh-password">
+              <label for="ssh-password">Contraseña SSH (Se recordará para autoconectar)</label>
+              <div class="password-input-wrapper">
+                <input type="password" id="ssh-password" placeholder="Escribe tu contraseña para guardarla">
+                <button type="button" id="btn-toggle-ssh-pwd" class="btn-toggle-pwd" title="Mostrar/Ocultar contraseña">👁️</button>
+              </div>
+            </div>
+
+            <!-- Private key fields -->
             <div class="form-group" id="group-ssh-key" style="display: none;">
               <label for="ssh-key-path">Ruta de Clave Privada</label>
               <input type="text" id="ssh-key-path" placeholder="/home/usuario/.ssh/id_rsa">
+            </div>
+
+            <div class="form-group" id="group-ssh-passphrase" style="display: none;">
+              <label for="ssh-passphrase">Frase de paso (Passphrase de la llave, si aplica)</label>
+              <div class="password-input-wrapper">
+                <input type="password" id="ssh-passphrase" placeholder="Passphrase de la llave privada">
+                <button type="button" id="btn-toggle-ssh-phrase" class="btn-toggle-pwd" title="Mostrar/Ocultar">👁️</button>
+              </div>
             </div>
 
             <div class="form-group">

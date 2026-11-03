@@ -748,7 +748,7 @@ body, html {
 }
 
 .modal-dialog.modal-lg {
-  width: 760px;
+  width: 820px;
 }
 
 .modal-header {
@@ -853,7 +853,7 @@ body, html {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  max-height: 340px;
   overflow-y: auto;
   margin-bottom: 12px;
   padding-right: 4px;
@@ -871,14 +871,46 @@ body, html {
 
 .git-action-enable {
   cursor: pointer;
+  width: 16px;
+  height: 16px;
 }
 
 .git-action-input-label {
-  width: 100px;
+  width: 110px;
 }
 
 .git-action-input-cmd {
   flex: 1;
+}
+
+/* Password Input with eye toggle button */
+.password-input-wrapper {
+  display: flex;
+  position: relative;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrapper input {
+  padding-right: 36px;
+  width: 100%;
+}
+
+.btn-toggle-pwd {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 6px;
+  color: var(--text-dim);
+  border-radius: 4px;
+}
+
+.btn-toggle-pwd:hover {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Form Styles */
@@ -903,6 +935,7 @@ label {
 }
 
 input[type="text"],
+input[type="password"],
 input[type="number"],
 select {
   width: 100%;
