@@ -71,6 +71,7 @@ body.theme-light {
   --accent-yellow: #ffb703;
   --accent-red: #ef4444;
   --accent-green: #10b981;
+  --ssh-active-color: #b91c1c;
 
   --topbar-height: 40px;
   --term-header-height: 34px;
@@ -181,36 +182,39 @@ body, html {
 
 /* Tab connected to SSH */
 .tab-item.tab-ssh {
-  background: linear-gradient(180deg, rgba(30, 58, 138, 0.25) 0%, rgba(30, 58, 138, 0.5) 100%);
-  color: #bfdbfe;
-  border-bottom: 2px solid #3b82f6;
-  border-top: 1px solid rgba(59, 130, 246, 0.4);
+  background: var(--ssh-active-color, #b91c1c) !important;
+  color: #ffffff !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.6) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+  opacity: 0.9;
 }
 
 .tab-item.tab-ssh:hover {
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.35) 0%, rgba(30, 58, 138, 0.65) 100%);
-  color: #ffffff;
+  opacity: 1;
+  filter: brightness(1.15);
+  color: #ffffff !important;
 }
 
 .tab-item.tab-ssh.active {
-  background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
-  color: #ffffff;
-  border-bottom: 2px solid #60a5fa;
+  background: var(--ssh-active-color, #b91c1c) !important;
+  color: #ffffff !important;
+  border-bottom: 3px solid #ffffff !important;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  opacity: 1;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
 }
 
 body.theme-light .tab-item.tab-ssh {
-  background: #dbeafe;
-  color: #1e40af;
-  border-bottom: 2px solid #3b82f6;
-  border-top: 1px solid rgba(37, 99, 235, 0.3);
+  background: var(--ssh-active-color, #b91c1c) !important;
+  color: #ffffff !important;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.3) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
 }
 
 body.theme-light .tab-item.tab-ssh.active {
-  background: #bfdbfe;
-  color: #1e3a8a;
-  border-bottom: 2px solid #1d4ed8;
+  background: var(--ssh-active-color, #b91c1c) !important;
+  color: #ffffff !important;
+  border-bottom: 3px solid #ffffff !important;
   font-weight: 600;
 }
 
@@ -383,19 +387,16 @@ body.theme-light .tab-item.tab-ssh.active {
   color: var(--tb-text);
   font-size: 12px;
   z-index: 20;
+  overflow: visible;
 }
 
 .tb-left-group {
   display: flex;
   align-items: center;
   gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
   flex: 1;
-}
-
-.tb-left-group::-webkit-scrollbar {
-  display: none;
+  min-width: 0;
+  overflow: visible;
 }
 
 .tb-label {
@@ -545,13 +546,15 @@ body.theme-light .ssh-badge-host {
 
 /* Terminal pane header when connected to SSH */
 .terminal-header.header-ssh {
-  border-bottom: 2px solid #3b82f6;
-  background-color: #e0e7ff;
+  background-color: var(--ssh-active-color, #b91c1c) !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.4) !important;
+  color: #ffffff !important;
 }
 
-body.theme-dark .terminal-header.header-ssh {
-  border-bottom: 2px solid #3b82f6;
-  background-color: #1a1e2e;
+body.theme-light .terminal-header.header-ssh {
+  background-color: var(--ssh-active-color, #b91c1c) !important;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.3) !important;
+  color: #ffffff !important;
 }
 
 /* Git Branch Pill Button */
@@ -705,6 +708,7 @@ body.theme-light .tb-git-action-btn:hover {
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 100;
 }
 
 .tb-git-overflow-btn {
@@ -746,13 +750,13 @@ body.theme-light .tb-git-overflow-btn:hover {
   position: absolute;
   top: 100%;
   left: 0;
-  margin-top: 3px;
+  margin-top: 4px;
   background-color: var(--bg-panel);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.55);
   min-width: 140px;
-  z-index: 600;
+  z-index: 9999 !important;
   display: none;
   padding: 4px 0;
 }

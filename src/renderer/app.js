@@ -105,6 +105,7 @@ class TuxTerminalApp {
     }
 
     this.applyTheme(this.config.theme || 'dark');
+    this.applySshHeaderColor();
 
     try {
       this.profiles = await window.api.getProfiles();
@@ -150,6 +151,11 @@ class TuxTerminalApp {
         item.term.options.theme = xtermTheme;
       }
     }
+  }
+
+  applySshHeaderColor() {
+    const color = this.config?.sshHeaderColor || '#b91c1c';
+    document.documentElement.style.setProperty('--ssh-active-color', color);
   }
 
   getXtermTheme(theme) {
@@ -394,6 +400,45 @@ class TuxTerminalApp {
       this.handleSaveTabTemplate();
     });
 
+    // Git Commit Modal setup
+    this.modalGitCommit = document.getElementById('modal-git-commit');
+    const commitMsgInput = document.getElementById('git-commit-msg');
+    const commitForm = document.getElementById('git-commit-form');
+    const chkCommitAll = document.getElementById('git-commit-opt-all');
+    const chkCommitAmend = document.getElementById('git-commit-opt-amend');
+
+    if (commitMsgInput) {
+      commitMsgInput.addEventListener('input', () => this.updateGitCommitPreview());
+      commitMsgInput.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          this.executeGitCommit();
+        }
+      });
+    }
+
+    if (chkCommitAll) {
+      chkCommitAll.addEventListener('change', () => this.updateGitCommitPreview());
+    }
+    if (chkCommitAmend) {
+      chkCommitAmend.addEventListener('change', () => this.updateGitCommitPreview());
+    }
+
+    if (commitForm) {
+      commitForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.executeGitCommit();
+      });
+    }
+
+    const cfgSshColor = document.getElementById('cfg-ssh-color');
+    if (cfgSshColor) {
+      cfgSshColor.addEventListener('input', (e) => {
+        const span = document.getElementById('cfg-ssh-color-code');
+        if (span) span.textContent = `${e.target.value}`;
+      });
+    }
+
     this.gitUserForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const termId = this.gitTargetTermId || this.activeTerminalId;
@@ -482,6 +527,12 @@ class TuxTerminalApp {
     this.cfgFontFamilyInput.value = this.config.fontFamily || "Consolas, 'Fira Code', monospace";
     this.cfgScrollbackInput.value = this.config.scrollback || 5000;
 
+    const sshColor = this.config.sshHeaderColor || '#b91c1c';
+    const colorInput = document.getElementById('cfg-ssh-color');
+    if (colorInput) colorInput.value = sshColor;
+    const colorCode = document.getElementById('cfg-ssh-color-code');
+    if (colorCode) colorCode.textContent = sshColor;
+
     this.cfgDefaultShellSelect.innerHTML = '';
     this.availableShells.forEach((sh) => {
       const opt = document.createElement('option');
@@ -504,6 +555,12 @@ class TuxTerminalApp {
     this.config.fontSize = parseInt(this.cfgFontSizeInput.value, 10) || 13;
     this.config.fontFamily = this.cfgFontFamilyInput.value.trim() || "Consolas, 'Fira Code', monospace";
     this.config.scrollback = parseInt(this.cfgScrollbackInput.value, 10) || 5000;
+
+    const colorInput = document.getElementById('cfg-ssh-color');
+    if (colorInput) {
+      this.config.sshHeaderColor = colorInput.value || '#b91c1c';
+    }
+    this.applySshHeaderColor();
 
     this.applyTheme(this.config.theme);
 
@@ -1147,6 +1204,12 @@ class TuxTerminalApp {
           return;
         }
 
+        // Dedicated interactive modal for commit
+        if (act.action === 'commit' || act.id === 'act-commit' || act.label.toLowerCase() === 'commit' || (act.cmd && act.cmd.trim().startsWith('git commit'))) {
+          this.openGitCommitModal(termId);
+          return;
+        }
+
         if (act.cmd) {
           let command = act.cmd;
           const promptMatch = command.match(/\{prompt(?::([^}]+))?\}/);
@@ -1348,6 +1411,79 @@ class TuxTerminalApp {
     }
   }
 
+  // ================= GIT COMMIT MODAL =================
+  openGitCommitModal(termId) {
+    this.gitCommitTargetTermId = termId;
+    const msgInput = document.getElementById('git-commit-msg');
+    const chkAll = document.getElementById('git-commit-opt-all');
+    const chkAmend = document.getElementById('git-commit-opt-amend');
+
+    if (msgInput) msgInput.value = '';
+    if (chkAll) chkAll.checked = false;
+    if (chkAmend) chkAmend.checked = false;
+
+    this.updateGitCommitPreview();
+    if (this.modalGitCommit) {
+      this.modalGitCommit.classList.remove('hidden');
+    }
+    if (msgInput) {
+      setTimeout(() => msgInput.focus(), 100);
+    }
+  }
+
+  updateGitCommitPreview() {
+    const msgInput = document.getElementById('git-commit-msg');
+    const chkAll = document.getElementById('git-commit-opt-all');
+    const chkAmend = document.getElementById('git-commit-opt-amend');
+    const previewEl = document.getElementById('git-commit-preview');
+
+    const msg = msgInput ? msgInput.value : '';
+    const optAll = chkAll ? chkAll.checked : false;
+    const optAmend = chkAmend ? chkAmend.checked : false;
+
+    let cmd = 'git commit';
+    if (optAll) cmd += ' -a';
+    if (optAmend) cmd += ' --amend';
+
+    const cleanMsg = msg ? msg.replace(/"/g, '\\"') : '...';
+    cmd += ` -m "${cleanMsg}"`;
+
+    if (previewEl) {
+      previewEl.textContent = cmd;
+    }
+  }
+
+  executeGitCommit() {
+    const termId = this.gitCommitTargetTermId || this.activeTerminalId;
+    if (!termId) return;
+
+    const msgInput = document.getElementById('git-commit-msg');
+    const chkAll = document.getElementById('git-commit-opt-all');
+    const chkAmend = document.getElementById('git-commit-opt-amend');
+
+    const msg = msgInput ? msgInput.value.trim() : '';
+    const optAll = chkAll ? chkAll.checked : false;
+    const optAmend = chkAmend ? chkAmend.checked : false;
+
+    if (!msg && !optAmend) {
+      alert('Por favor ingresa un mensaje para el commit.');
+      return;
+    }
+
+    let cmd = 'git commit';
+    if (optAll) cmd += ' -a';
+    if (optAmend) cmd += ' --amend';
+    if (msg) {
+      cmd += ` -m "${msg.replace(/"/g, '\\"')}"`;
+    }
+
+    window.api.writeTerminal(termId, `${cmd}\r`);
+    if (this.modalGitCommit) {
+      this.modalGitCommit.classList.add('hidden');
+    }
+    setTimeout(() => this.refreshGitInfo(termId), 500);
+  }
+
   // ================= GIT BUTTONS OVERFLOW MENU =================
   updateGitButtonsOverflow(termId) {
     const header = document.getElementById(`header-${termId}`);
@@ -1370,25 +1506,27 @@ class TuxTerminalApp {
       return;
     }
 
-    // Unhide all buttons temporarily to measure available width
+    // Step 1: Temporarily unhide all buttons to measure accurate widths
     actionButtons.forEach((btn) => (btn.style.display = ''));
     overflowWrapper.classList.remove('hidden');
     overflowMenu.innerHTML = '';
 
-    const overflowBtn = overflowWrapper.querySelector('.tb-git-overflow-btn');
-    const overflowBtnWidth = overflowBtn ? overflowBtn.offsetWidth + 8 : 32;
+    const rightGroupLeft = rightGroup.getBoundingClientRect().left;
+    const gitActionsLeft = gitActions.getBoundingClientRect().left;
+    // Available width for buttons before needing the overflow toggle
+    const availableWidth = rightGroupLeft - gitActionsLeft - 38;
 
-    const rightBoundary = rightGroup.getBoundingClientRect().left - 8;
-
+    let accumulatedWidth = 0;
     let overflowStartIndex = -1;
 
     for (let i = 0; i < actionButtons.length; i++) {
       const btn = actionButtons[i];
-      const rect = btn.getBoundingClientRect();
-      if (rect.right > rightBoundary - overflowBtnWidth) {
+      const btnWidth = btn.offsetWidth + 3;
+      if (accumulatedWidth + btnWidth > availableWidth) {
         overflowStartIndex = i;
         break;
       }
+      accumulatedWidth += btnWidth;
     }
 
     if (overflowStartIndex !== -1) {

@@ -154,6 +154,7 @@ function getDefaultConfig() {
     fontFamily: 'Consolas, "Fira Code", monospace',
     scrollback: 5000,
     defaultDir: 'cwd',
+    sshHeaderColor: '#b91c1c',
     gitActions: [
       { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
       { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },

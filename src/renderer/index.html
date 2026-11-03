@@ -158,6 +158,15 @@
             </div>
 
             <div class="form-group">
+              <label for="cfg-ssh-color">Color de barra en conexión SSH</label>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <input type="color" id="cfg-ssh-color" value="#b91c1c" style="width:48px; height:32px; padding:2px; border:1px solid var(--border-color); border-radius:4px; cursor:pointer; background:var(--input-bg);">
+                <span id="cfg-ssh-color-code" style="font-family:monospace; font-size:12px; color:var(--text-main);">#b91c1c (Rojo)</span>
+              </div>
+              <small class="form-hint">Color de acento que tomarán la barra de la terminal y la pestaña al conectarse a un SSH remoto.</small>
+            </div>
+
+            <div class="form-group">
               <label for="cfg-default-shell">Terminal / Shell por Defecto</label>
               <select id="cfg-default-shell"></select>
               <small class="form-hint">En Linux la predeterminada es Bash (/bin/bash). Puedes cambiarla por cualquier otra shell instalada.</small>
@@ -441,6 +450,49 @@
             ✕ Cancelar
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Git Commit Interactivo -->
+  <div id="modal-git-commit" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">🌿</span> Confirmar Cambios (Git Commit)
+        </div>
+        <button class="modal-close" data-close-modal="modal-git-commit">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="git-commit-form">
+          <div class="form-group">
+            <label for="git-commit-msg">Mensaje del Commit *</label>
+            <textarea id="git-commit-msg" rows="4" placeholder="Ej. feat: agregar nueva funcionalidad..." style="width:100%; font-family:inherit; font-size:12px; resize:vertical; padding:8px; border-radius:4px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-main);" required></textarea>
+            <small class="form-hint">Tip: Presiona <kbd style="background:var(--bg-hover); padding:1px 5px; border-radius:3px;">Ctrl + Enter</kbd> para ejecutar el commit directamente.</small>
+          </div>
+
+          <div class="form-row" style="gap: 16px; margin: 12px 0;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+              <input type="checkbox" id="git-commit-opt-all">
+              <span>Incluir todos los archivos modificados (<b>-a</b>)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+              <input type="checkbox" id="git-commit-opt-amend">
+              <span>Enmendar último commit (<b>--amend</b>)</span>
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label>Previsualización del comando generado:</label>
+            <pre id="git-commit-preview" style="background:var(--input-bg); border:1px solid var(--border-color); padding:10px 12px; border-radius:4px; font-family:Consolas, monospace; font-size:12px; color:var(--accent-cyan); white-space:pre-wrap; word-break:break-all; margin-top:4px;">git commit -m "..."</pre>
+          </div>
+
+          <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn btn-secondary" data-close-modal="modal-git-commit">Cancelar</button>
+            <button type="submit" id="btn-git-commit-submit" class="btn btn-primary">Ejecutar Commit</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
