@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyTerminal Tux Tux</title>
+  <!-- xterm CSS from node_modules or bundled -->
+  <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Navigation Bar -->
+    <header id="top-bar">
+      <div class="app-brand">
+        <span class="brand-icon">🐧</span>
+        <span class="brand-title">Tux Tux</span>
+      </div>
+
+      <!-- Tabs List -->
+      <div id="tabs-container">
+        <div id="tabs-list"></div>
+        <button id="btn-new-tab" class="icon-btn" title="Nueva Pestaña (Ctrl+Shift+T)">➕</button>
+      </div>
+
+      <!-- Global Actions -->
+      <div class="global-actions">
+        <button id="btn-global-sessions" class="top-btn" title="Guardar o Restaurar Sesión General">
+          <span class="btn-icon">💾</span> Sesión
+        </button>
+        <button id="btn-tab-layouts" class="top-btn" title="Guardar o Aplicar Layout de Pestaña">
+          <span class="btn-icon">📐</span> Layout
+        </button>
+        <button id="btn-ssh-manager" class="top-btn highlight" title="Administrar Perfiles SSH">
+          <span class="btn-icon">🔑</span> Perfiles SSH
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace where tabs render their terminal trees -->
+    <main id="workspace"></main>
+
+    <!-- Status Bar -->
+    <footer id="status-bar">
+      <div id="status-info">
+        <span id="active-tab-info">Pestaña 1</span> • 
+        <span id="active-term-info">Terminal activa: Ninguna</span>
+      </div>
+      <div class="shortcuts-hint">
+        <span>Click derecho en terminal: <b>Menú Dividir/SSH</b></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Custom Context Menu for Terminals -->
+  <div id="context-menu" class="context-menu hidden">
+    <div class="menu-item" data-action="split-h">
+      <span class="menu-icon">⬍</span> Dividir Horizontalmente
+    </div>
+    <div class="menu-item" data-action="split-v">
+      <span class="menu-icon">⬌</span> Dividir Verticalmente
+    </div>
+    <div class="menu-separator"></div>
+    <div class="menu-item has-submenu" id="ctx-ssh-profiles-item">
+      <span class="menu-icon">🔑</span> Cargar Perfil SSH ▶
+      <div id="ctx-ssh-submenu" class="submenu"></div>
+    </div>
+    <div class="menu-separator"></div>
+    <div class="menu-item" data-action="copy">
+      <span class="menu-icon">📋</span> Copiar
+    </div>
+    <div class="menu-item" data-action="paste">
+      <span class="menu-icon">📥</span> Pegar
+    </div>
+    <div class="menu-item" data-action="clear">
+      <span class="menu-icon">🧹</span> Limpiar Pantalla
+    </div>
+    <div class="menu-separator"></div>
+    <div class="menu-item danger" data-action="close-terminal">
+      <span class="menu-icon">✕</span> Cerrar Terminal
+    </div>
+  </div>
+
+  <!-- Modal: SSH Profiles Manager -->
+  <div id="modal-ssh" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">🔑</span> Administrador de Perfiles SSH
+        </div>
+        <button class="modal-close" data-close-modal="modal-ssh">&times;</button>
+      </div>
+      <div class="modal-body ssh-manager-layout">
+        <!-- Sidebar with Profiles List -->
+        <div class="ssh-sidebar">
+          <div class="ssh-list-header">
+            <span>Perfiles Guardados</span>
+            <button id="btn-ssh-add-new" class="btn btn-sm btn-primary">+ Nuevo</button>
+          </div>
+          <div id="ssh-profiles-list" class="profiles-list"></div>
+        </div>
+
+        <!-- Form for editing / creating profile -->
+        <div class="ssh-form-container">
+          <h3 id="ssh-form-title">Editar Perfil</h3>
+          <form id="ssh-profile-form">
+            <input type="hidden" id="ssh-id" value="">
+            
+            <div class="form-group">
+              <label for="ssh-name">Nombre del Perfil *</label>
+              <input type="text" id="ssh-name" required placeholder="Ej. Servidor Producción Web">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-2">
+                <label for="ssh-host">Host / Dirección IP *</label>
+                <input type="text" id="ssh-host" required placeholder="192.168.1.100 o vps.midominio.com">
+              </div>
+              <div class="form-group flex-1">
+                <label for="ssh-port">Puerto</label>
+                <input type="number" id="ssh-port" value="22" min="1" max="65535">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="ssh-username">Usuario SSH *</label>
+              <input type="text" id="ssh-username" required placeholder="ubuntu, root, admin...">
+            </div>
+
+            <div class="form-group">
+              <label for="ssh-auth-type">Método de Autenticación</label>
+              <select id="ssh-auth-type">
+                <option value="password">Contraseña (Interactiva)</option>
+                <option value="key">Llave Privada (.pem / .id_rsa)</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="group-ssh-key" style="display: none;">
+              <label for="ssh-key-path">Ruta de Clave Privada</label>
+              <input type="text" id="ssh-key-path" placeholder="/home/usuario/.ssh/id_rsa">
+            </div>
+
+            <div class="form-group">
+              <label for="ssh-extra-args">Argumentos adicionales (Opcional)</label>
+              <input type="text" id="ssh-extra-args" placeholder="-X -C -o ServerAliveInterval=60">
+            </div>
+
+            <div class="form-actions">
+              <button type="button" id="btn-ssh-delete" class="btn btn-danger hidden">Eliminar</button>
+              <div class="form-actions-right">
+                <button type="submit" class="btn btn-primary">Guardar Perfil</button>
+                <button type="button" id="btn-ssh-connect-active" class="btn btn-success">Conectar en Terminal Activa</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Session Manager (Overall State) -->
+  <div id="modal-session" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">💾</span> Guardar y Cargar Estado General
+        </div>
+        <button class="modal-close" data-close-modal="modal-session">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Guarda todas las pestañas abiertas y la disposición completa de terminales para restaurarlas en cualquier momento.</p>
+        
+        <div class="save-box">
+          <label for="new-session-name">Guardar sesión actual:</label>
+          <div class="input-with-button">
+            <input type="text" id="new-session-name" placeholder="Nombre de la sesión (ej. Trabajo Diario, Backend)">
+            <button id="btn-save-current-session" class="btn btn-primary">Guardar</button>
+          </div>
+        </div>
+
+        <div class="sessions-list-container">
+          <h4>Sesiones Guardadas</h4>
+          <div id="saved-sessions-list" class="saved-items-list">
+            <div class="empty-msg">No hay sesiones guardadas todavía.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Tab Layout Manager (Tab State & Templates) -->
+  <div id="modal-tab-layout" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">📐</span> Disposición de la Pestaña Activa
+        </div>
+        <button class="modal-close" data-close-modal="modal-tab-layout">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Guarda la estructura de splits de esta pestaña o aplica una disposición prediseñada.</p>
+        
+        <div class="save-box">
+          <label for="new-tab-template-name">Guardar estructura de esta pestaña como plantilla:</label>
+          <div class="input-with-button">
+            <input type="text" id="new-tab-template-name" placeholder="Ej. 3 splits monitoring">
+            <button id="btn-save-tab-template" class="btn btn-primary">Guardar Plantilla</button>
+          </div>
+        </div>
+
+        <div class="templates-list-container">
+          <h4>Plantillas y Disposiciones Disponibles</h4>
+          <div id="tab-templates-list" class="saved-items-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core App Scripts -->
+  <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="../../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
