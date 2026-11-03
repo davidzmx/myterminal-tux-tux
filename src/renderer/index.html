@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="theme-dark">
   <div id="app">
     <!-- Top Navigation Bar -->
     <header id="top-bar">
@@ -24,12 +24,23 @@
 
       <!-- Global Actions -->
       <div class="global-actions">
+        <!-- Quick Theme Toggle -->
+        <button id="btn-theme-toggle" class="top-btn" title="Alternar Modo Claro / Oscuro">
+          <span id="theme-icon">🌙</span> <span id="theme-text">Oscuro</span>
+        </button>
+
+        <button id="btn-settings" class="top-btn" title="Configuración General">
+          <span class="btn-icon">⚙️</span> Ajustes
+        </button>
+
         <button id="btn-global-sessions" class="top-btn" title="Guardar o Restaurar Sesión General">
           <span class="btn-icon">💾</span> Sesión
         </button>
+
         <button id="btn-tab-layouts" class="top-btn" title="Guardar o Aplicar Layout de Pestaña">
           <span class="btn-icon">📐</span> Layout
         </button>
+
         <button id="btn-ssh-manager" class="top-btn highlight" title="Administrar Perfiles SSH">
           <span class="btn-icon">🔑</span> Perfiles SSH
         </button>
@@ -46,7 +57,7 @@
         <span id="active-term-info">Terminal activa: Ninguna</span>
       </div>
       <div class="shortcuts-hint">
-        <span>Click derecho en terminal: <b>Menú Dividir / SSH</b> • Ctrl+Shift+O (H) • Ctrl+Shift+E (V)</span>
+        <span>Click derecho: <b>Menú Dividir / SSH</b> • Ctrl+Shift+O (H) • Ctrl+Shift+E (V) • Ctrl+Shift+T (Pestaña)</span>
       </div>
     </footer>
   </div>
@@ -77,6 +88,92 @@
     <div class="menu-separator"></div>
     <div class="menu-item danger" data-action="close-terminal">
       <span class="menu-icon">✕</span> Cerrar Terminal
+    </div>
+  </div>
+
+  <!-- Modal: General Settings & Git Actions Config -->
+  <div id="modal-settings" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">⚙️</span> Configuración General
+        </div>
+        <button class="modal-close" data-close-modal="modal-settings">&times;</button>
+      </div>
+      <div class="modal-body settings-layout">
+        <!-- Settings tabs: General vs Git Actions -->
+        <div class="settings-nav">
+          <button class="settings-nav-btn active" data-settings-tab="tab-general-opts">General & Terminal</button>
+          <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Botones de Acciones Git</button>
+        </div>
+
+        <!-- Section 1: General Options -->
+        <div id="tab-general-opts" class="settings-tab-pane active">
+          <form id="general-config-form">
+            <div class="form-group">
+              <label for="cfg-theme">Tema de la Interfaz</label>
+              <select id="cfg-theme">
+                <option value="dark">Modo Oscuro (Dark Theme)</option>
+                <option value="light">Modo Claro (Light Theme)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="cfg-default-shell">Terminal / Shell por Defecto</label>
+              <select id="cfg-default-shell"></select>
+              <small class="form-hint">En Linux la predeterminada es Bash (/bin/bash). Puedes cambiarla por cualquier otra shell instalada.</small>
+            </div>
+
+            <div class="form-group">
+              <label for="cfg-default-dir">Directorio Inicial de las Consolas</label>
+              <select id="cfg-default-dir">
+                <option value="cwd">Directorio del Proyecto Actual</option>
+                <option value="home">Carpeta Personal de Usuario (~ / $HOME)</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="cfg-font-size">Tamaño de Fuente (px)</label>
+                <input type="number" id="cfg-font-size" min="9" max="32" value="13">
+              </div>
+              <div class="form-group flex-2">
+                <label for="cfg-font-family">Familia de Fuente</label>
+                <input type="text" id="cfg-font-family" value="Consolas, 'Fira Code', monospace">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cfg-scrollback">Líneas de Historial (Scrollback)</label>
+              <input type="number" id="cfg-scrollback" min="500" max="50000" step="500" value="5000">
+            </div>
+
+            <div class="form-actions">
+              <span></span>
+              <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Section 2: Git Actions Options -->
+        <div id="tab-git-opts" class="settings-tab-pane">
+          <div class="git-actions-header">
+            <p class="modal-subtitle">Configura qué botones de comandos Git aparecen en la barra de cada terminal y qué acción ejecutan.</p>
+            <div class="git-actions-top-btns">
+              <button id="btn-add-git-action" class="btn btn-sm btn-primary">+ Nueva Acción</button>
+              <button id="btn-reset-git-actions" class="btn btn-sm">↺ Restaurar Predeterminados</button>
+            </div>
+          </div>
+
+          <div id="git-actions-list" class="git-actions-config-list"></div>
+
+          <div class="form-actions">
+            <span></span>
+            <button id="btn-save-git-actions" class="btn btn-primary">Guardar Acciones Git</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

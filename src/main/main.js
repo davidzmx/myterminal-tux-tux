@@ -20,7 +20,6 @@ function getAvailableShells() {
   const platform = process.platform;
 
   if (platform === 'win32') {
-    // Windows common shells
     const candidates = [
       { name: 'PowerShell', path: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') },
       { name: 'PowerShell 7', path: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' },
@@ -58,19 +57,22 @@ function getAvailableShells() {
     const seenPaths = new Set();
     const candidatePaths = [];
 
+    // Prioritize Bash first for Linux
+    ['/bin/bash', '/usr/bin/bash'].forEach(p => candidatePaths.push(p));
+
     if (fs.existsSync('/etc/shells')) {
       try {
         const lines = fs.readFileSync('/etc/shells', 'utf-8').split('\n');
         for (let line of lines) {
           line = line.trim();
-          if (line && !line.startsWith('#')) {
+          if (line && !line.startsWith('#') && !candidatePaths.includes(line)) {
             candidatePaths.push(line);
           }
         }
       } catch (e) {}
     }
 
-    ['/bin/bash', '/usr/bin/bash', '/bin/dash', '/usr/bin/dash', '/bin/zsh', '/usr/bin/zsh', '/usr/bin/fish', '/bin/sh'].forEach(p => {
+    ['/bin/dash', '/usr/bin/dash', '/bin/zsh', '/usr/bin/zsh', '/usr/bin/fish', '/bin/sh'].forEach(p => {
       if (!candidatePaths.includes(p)) candidatePaths.push(p);
     });
 
@@ -97,17 +99,6 @@ function getAvailableShells() {
   }
 
   return shells;
-}
-
-function getDefaultShell() {
-  const available = getAvailableShells();
-  if (available.length > 0) {
-    return available[0].path;
-  }
-  if (process.platform === 'win32') {
-    return process.env.COMSPEC || 'powershell.exe';
-  }
-  return process.env.SHELL || '/bin/bash';
 }
 
 function getStoragePath(fileName) {
@@ -140,6 +131,56 @@ function saveJsonFile(fileName, data) {
     console.error(`Error saving ${fileName}:`, err);
     return false;
   }
+}
+
+// Default Configuration
+function getDefaultConfig() {
+  const available = getAvailableShells();
+  let defaultShellPath = '';
+
+  if (process.platform === 'win32') {
+    const ps = available.find(s => s.name.includes('PowerShell'));
+    defaultShellPath = ps ? ps.path : (process.env.COMSPEC || 'powershell.exe');
+  } else {
+    // En Linux por default SIEMPRE bash
+    const bash = available.find(s => s.path === '/bin/bash' || s.path === '/usr/bin/bash' || s.name.toLowerCase() === 'bash');
+    defaultShellPath = bash ? bash.path : (available[0]?.path || '/bin/bash');
+  }
+
+  return {
+    theme: 'dark', // 'dark' | 'light'
+    defaultShell: defaultShellPath,
+    fontSize: 13,
+    fontFamily: 'Consolas, "Fira Code", monospace',
+    scrollback: 5000,
+    defaultDir: 'cwd', // 'cwd' | 'home'
+    gitActions: [
+      { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
+      { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
+      { id: 'act-unstage', label: 'Unstage', cmd: 'git reset', enabled: true },
+      { id: 'act-commit', label: 'Commit', cmd: 'git commit -m "{prompt:Mensaje de commit}"', enabled: true },
+      { id: 'act-push', label: 'Push', cmd: 'git push', enabled: true },
+      { id: 'act-pull', label: 'Pull', cmd: 'git pull', enabled: true },
+      { id: 'act-fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
+      { id: 'act-diff', label: 'Diff', cmd: 'git diff', enabled: true },
+      { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
+      { id: 'act-user', label: 'user Git', action: 'user-git', enabled: true }
+    ]
+  };
+}
+
+function getUserConfig() {
+  const defaults = getDefaultConfig();
+  const saved = loadJsonFile('config.json', {});
+  return { ...defaults, ...saved, gitActions: saved.gitActions || defaults.gitActions };
+}
+
+function getDefaultShell() {
+  const config = getUserConfig();
+  if (config.defaultShell && fs.existsSync(config.defaultShell)) {
+    return config.defaultShell;
+  }
+  return getDefaultConfig().defaultShell;
 }
 
 function getPtyCwd(id) {
@@ -265,17 +306,34 @@ function createWindow() {
 }
 
 function registerIpcHandlers() {
+  // Config
+  ipcMain.handle('config:get', () => {
+    return getUserConfig();
+  });
+
+  ipcMain.handle('config:save', (event, newConfig) => {
+    return saveJsonFile('config.json', newConfig);
+  });
+
+  // Available Shells
   ipcMain.handle('shells:get-available', () => {
     return getAvailableShells();
   });
 
+  // PTY: Create terminal process
   ipcMain.handle('terminal:create', async (event, { id, cols = 80, rows = 24, cwd, shellPath, initialCommand }) => {
     if (!pty) {
       throw new Error('node-pty is not installed or available on this system.');
     }
 
+    const config = getUserConfig();
     const targetShell = shellPath && fs.existsSync(shellPath) ? shellPath : getDefaultShell();
-    const workingDir = cwd && fs.existsSync(cwd) ? cwd : process.cwd();
+    
+    let defaultWorkingDir = process.cwd();
+    if (config.defaultDir === 'home') {
+      defaultWorkingDir = os.homedir();
+    }
+    const workingDir = cwd && fs.existsSync(cwd) ? cwd : defaultWorkingDir;
 
     const ptyProcess = pty.spawn(targetShell, [], {
       name: 'xterm-256color',
@@ -319,6 +377,7 @@ function registerIpcHandlers() {
     return { id, shellPath: targetShell, cwd: workingDir };
   });
 
+  // PTY: Switch shell
   ipcMain.handle('terminal:switch-shell', async (event, { id, shellPath, cols = 80, rows = 24 }) => {
     const existing = ptys.get(id);
     const cwd = getPtyCwd(id);
@@ -395,6 +454,7 @@ function registerIpcHandlers() {
     return false;
   });
 
+  // Git
   ipcMain.handle('git:get-info', (event, { id }) => {
     const cwd = getPtyCwd(id);
     return getGitInfoForDir(cwd);
@@ -411,6 +471,7 @@ function registerIpcHandlers() {
     }
   });
 
+  // SSH Profiles
   ipcMain.handle('profiles:get', () => {
     return loadJsonFile('ssh-profiles.json', [
       {
@@ -430,6 +491,7 @@ function registerIpcHandlers() {
     return saveJsonFile('ssh-profiles.json', profiles);
   });
 
+  // Sessions
   ipcMain.handle('sessions:get-all', () => {
     return loadJsonFile('sessions.json', {});
   });
@@ -450,6 +512,7 @@ function registerIpcHandlers() {
     return saveJsonFile('sessions.json', sessions);
   });
 
+  // Tab Templates
   ipcMain.handle('tab-templates:get-all', () => {
     return loadJsonFile('tab-templates.json', {
       'Single Terminal': {
@@ -517,6 +580,7 @@ function registerIpcHandlers() {
     return saveJsonFile('tab-templates.json', templates);
   });
 
+  // System info
   ipcMain.handle('system:info', () => {
     return {
       platform: process.platform,

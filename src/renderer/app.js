@@ -14,6 +14,7 @@ function getWebLinksAddonClass() {
 
 class TuxTerminalApp {
   constructor() {
+    this.config = null;
     this.tabs = [];
     this.activeTabId = null;
     this.activeTerminalId = null;
@@ -37,11 +38,27 @@ class TuxTerminalApp {
     this.contextMenu = document.getElementById('context-menu');
     this.ctxSshSubmenu = document.getElementById('ctx-ssh-submenu');
 
+    // Theme Toggle
+    this.btnThemeToggle = document.getElementById('btn-theme-toggle');
+    this.themeIcon = document.getElementById('theme-icon');
+    this.themeText = document.getElementById('theme-text');
+
     // Modals
+    this.modalSettings = document.getElementById('modal-settings');
     this.modalSsh = document.getElementById('modal-ssh');
     this.modalSession = document.getElementById('modal-session');
     this.modalTabLayout = document.getElementById('modal-tab-layout');
     this.modalGitUser = document.getElementById('modal-git-user');
+
+    // Settings Modal elements
+    this.cfgThemeSelect = document.getElementById('cfg-theme');
+    this.cfgDefaultShellSelect = document.getElementById('cfg-default-shell');
+    this.cfgDefaultDirSelect = document.getElementById('cfg-default-dir');
+    this.cfgFontSizeInput = document.getElementById('cfg-font-size');
+    this.cfgFontFamilyInput = document.getElementById('cfg-font-family');
+    this.cfgScrollbackInput = document.getElementById('cfg-scrollback');
+    this.generalConfigForm = document.getElementById('general-config-form');
+    this.gitActionsListEl = document.getElementById('git-actions-list');
 
     // SSH Form elements
     this.sshForm = document.getElementById('ssh-profile-form');
@@ -57,11 +74,21 @@ class TuxTerminalApp {
 
   async loadInitialData() {
     try {
+      this.config = await window.api.getConfig();
+    } catch (e) {
+      console.error('Error loading config:', e);
+      this.config = { theme: 'dark', defaultDir: 'cwd', gitActions: [] };
+    }
+
+    try {
       this.availableShells = await window.api.getAvailableShells();
     } catch (e) {
       console.error('Error fetching shells:', e);
       this.availableShells = [{ name: 'Bash', path: '/bin/bash' }];
     }
+
+    // Apply configured theme
+    this.applyTheme(this.config.theme || 'dark');
 
     try {
       this.profiles = await window.api.getProfiles();
@@ -84,7 +111,84 @@ class TuxTerminalApp {
     });
   }
 
+  // ================= THEME (DARK / LIGHT) =================
+  applyTheme(theme) {
+    if (!this.config) this.config = {};
+    this.config.theme = theme;
+
+    if (theme === 'light') {
+      document.body.classList.remove('theme-dark');
+      document.body.classList.add('theme-light');
+      this.themeIcon.textContent = '☀️';
+      this.themeText.textContent = 'Claro';
+    } else {
+      document.body.classList.remove('theme-light');
+      document.body.classList.add('theme-dark');
+      this.themeIcon.textContent = '🌙';
+      this.themeText.textContent = 'Oscuro';
+    }
+
+    // Update active xterm themes
+    const xtermTheme = this.getXtermTheme(theme);
+    for (const item of this.terminals.values()) {
+      if (item.term) {
+        item.term.options.theme = xtermTheme;
+      }
+    }
+  }
+
+  getXtermTheme(theme) {
+    if (theme === 'light') {
+      return {
+        background: '#ffffff',
+        foreground: '#1e293b',
+        cursor: '#2563eb',
+        cursorAccent: '#ffffff',
+        selectionBackground: 'rgba(37, 99, 235, 0.25)',
+        black: '#000000',
+        red: '#dc2626',
+        green: '#16a34a',
+        yellow: '#ca8a04',
+        blue: '#2563eb',
+        magenta: '#9333ea',
+        cyan: '#0891b2',
+        white: '#64748b'
+      };
+    }
+    return {
+      background: '#0c0d12',
+      foreground: '#e2e8f0',
+      cursor: '#00adb5',
+      cursorAccent: '#0c0d12',
+      selectionBackground: 'rgba(0, 173, 181, 0.3)',
+      black: '#121317',
+      red: '#ef4444',
+      green: '#10b981',
+      yellow: '#ffb703',
+      blue: '#3a86ff',
+      magenta: '#8b5cf6',
+      cyan: '#00adb5',
+      white: '#ffffff'
+    };
+  }
+
+  async toggleTheme() {
+    const next = this.config.theme === 'light' ? 'dark' : 'light';
+    this.applyTheme(next);
+    await window.api.saveConfig(this.config);
+  }
+
   bindGlobalEvents() {
+    // Quick Theme Toggle button
+    this.btnThemeToggle.addEventListener('click', () => {
+      this.toggleTheme();
+    });
+
+    // Settings Modal button
+    document.getElementById('btn-settings').addEventListener('click', () => {
+      this.openSettingsModal();
+    });
+
     // New tab button
     this.btnNewTab.addEventListener('click', () => {
       this.createTab(`Pestaña ${this.tabs.length + 1}`);
@@ -118,23 +222,52 @@ class TuxTerminalApp {
       });
     });
 
+    // Settings Navigation Tabs
+    document.querySelectorAll('.settings-nav-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.settings-nav-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.settings-tab-pane').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        const targetId = btn.getAttribute('data-settings-tab');
+        document.getElementById(targetId).classList.add('active');
+      });
+    });
+
+    // General Config form submit
+    this.generalConfigForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.saveGeneralConfig();
+    });
+
+    // Git Actions config buttons
+    document.getElementById('btn-add-git-action').addEventListener('click', () => {
+      this.addNewGitAction();
+    });
+
+    document.getElementById('btn-reset-git-actions').addEventListener('click', async () => {
+      if (confirm('¿Restaurar las acciones Git predeterminadas?')) {
+        await this.resetDefaultGitActions();
+      }
+    });
+
+    document.getElementById('btn-save-git-actions').addEventListener('click', async () => {
+      await this.saveGitActionsConfig();
+    });
+
     // SSH form auth type toggle
     this.sshAuthTypeSelect.addEventListener('change', (e) => {
       this.sshKeyGroup.style.display = e.target.value === 'key' ? 'block' : 'none';
     });
 
-    // SSH form submit
     this.sshForm.addEventListener('submit', (e) => {
       e.preventDefault();
       this.handleSaveSshProfile();
     });
 
-    // Delete SSH profile
     this.btnSshDelete.addEventListener('click', () => {
       this.handleDeleteSshProfile();
     });
 
-    // SSH Connect in active terminal
     this.btnSshConnectActive.addEventListener('click', () => {
       const profile = this.getSelectedFormProfile();
       if (profile && this.activeTerminalId) {
@@ -145,17 +278,14 @@ class TuxTerminalApp {
       }
     });
 
-    // SSH Add new profile button
     document.getElementById('btn-ssh-add-new').addEventListener('click', () => {
       this.clearSshForm();
     });
 
-    // Save current overall session
     document.getElementById('btn-save-current-session').addEventListener('click', () => {
       this.handleSaveSession();
     });
 
-    // Save current tab template
     document.getElementById('btn-save-tab-template').addEventListener('click', () => {
       this.handleSaveTabTemplate();
     });
@@ -238,6 +368,176 @@ class TuxTerminalApp {
         }
       }
     });
+  }
+
+  // ================= SETTINGS MODAL =================
+  openSettingsModal() {
+    this.cfgThemeSelect.value = this.config.theme || 'dark';
+    this.cfgDefaultDirSelect.value = this.config.defaultDir || 'cwd';
+    this.cfgFontSizeInput.value = this.config.fontSize || 13;
+    this.cfgFontFamilyInput.value = this.config.fontFamily || "Consolas, 'Fira Code', monospace";
+    this.cfgScrollbackInput.value = this.config.scrollback || 5000;
+
+    // Populate Default Shell in settings
+    this.cfgDefaultShellSelect.innerHTML = '';
+    this.availableShells.forEach((sh) => {
+      const opt = document.createElement('option');
+      opt.value = sh.path;
+      opt.textContent = `${sh.name} (${sh.path})`;
+      if (sh.path === this.config.defaultShell) {
+        opt.selected = true;
+      }
+      this.cfgDefaultShellSelect.appendChild(opt);
+    });
+
+    this.renderGitActionsConfig();
+    this.modalSettings.classList.remove('hidden');
+  }
+
+  async saveGeneralConfig() {
+    this.config.theme = this.cfgThemeSelect.value;
+    this.config.defaultShell = this.cfgDefaultShellSelect.value;
+    this.config.defaultDir = this.cfgDefaultDirSelect.value;
+    this.config.fontSize = parseInt(this.cfgFontSizeInput.value, 10) || 13;
+    this.config.fontFamily = this.cfgFontFamilyInput.value.trim() || "Consolas, 'Fira Code', monospace";
+    this.config.scrollback = parseInt(this.cfgScrollbackInput.value, 10) || 5000;
+
+    this.applyTheme(this.config.theme);
+
+    // Apply font size / options to live terminals
+    for (const item of this.terminals.values()) {
+      if (item.term) {
+        item.term.options.fontSize = this.config.fontSize;
+        item.term.options.fontFamily = this.config.fontFamily;
+        item.term.options.scrollback = this.config.scrollback;
+      }
+    }
+    this.fitAllTerminals();
+
+    await window.api.saveConfig(this.config);
+    this.modalSettings.classList.add('hidden');
+  }
+
+  renderGitActionsConfig() {
+    this.gitActionsListEl.innerHTML = '';
+    const actions = this.config.gitActions || [];
+
+    actions.forEach((act, index) => {
+      const row = document.createElement('div');
+      row.className = 'git-action-config-row';
+
+      // Enable checkbox
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'git-action-enable';
+      chk.checked = act.enabled !== false;
+      chk.title = 'Mostrar botón en la barra';
+      chk.dataset.index = index;
+      chk.dataset.field = 'enabled';
+
+      // Label input
+      const inputLabel = document.createElement('input');
+      inputLabel.type = 'text';
+      inputLabel.className = 'git-action-input-label';
+      inputLabel.value = act.label || '';
+      inputLabel.placeholder = 'Etiqueta';
+      inputLabel.dataset.index = index;
+      inputLabel.dataset.field = 'label';
+
+      // Command input
+      const inputCmd = document.createElement('input');
+      inputCmd.type = 'text';
+      inputCmd.className = 'git-action-input-cmd';
+      inputCmd.value = act.cmd || (act.action === 'user-git' ? '(Acción: Cambiar usuario)' : '');
+      inputCmd.placeholder = 'Comando git (ej: git status)';
+      inputCmd.dataset.index = index;
+      inputCmd.dataset.field = 'cmd';
+      if (act.action === 'user-git') {
+        inputCmd.readOnly = true;
+      }
+
+      // Delete action button
+      const btnDel = document.createElement('button');
+      btnDel.type = 'button';
+      btnDel.className = 'btn btn-sm btn-danger';
+      btnDel.innerHTML = '✕';
+      btnDel.title = 'Eliminar acción';
+      btnDel.addEventListener('click', () => {
+        this.config.gitActions.splice(index, 1);
+        this.renderGitActionsConfig();
+      });
+
+      row.appendChild(chk);
+      row.appendChild(inputLabel);
+      row.appendChild(inputCmd);
+      row.appendChild(btnDel);
+
+      this.gitActionsListEl.appendChild(row);
+    });
+  }
+
+  addNewGitAction() {
+    if (!this.config.gitActions) this.config.gitActions = [];
+    this.config.gitActions.push({
+      id: 'act_' + Math.random().toString(36).substring(2, 7),
+      label: 'Nuevo',
+      cmd: 'git ',
+      enabled: true
+    });
+    this.renderGitActionsConfig();
+  }
+
+  async resetDefaultGitActions() {
+    const defaults = [
+      { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
+      { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
+      { id: 'act-unstage', label: 'Unstage', cmd: 'git reset', enabled: true },
+      { id: 'act-commit', label: 'Commit', cmd: 'git commit -m "{prompt:Mensaje de commit}"', enabled: true },
+      { id: 'push', label: 'Push', cmd: 'git push', enabled: true },
+      { id: 'pull', label: 'Pull', cmd: 'git pull', enabled: true },
+      { id: 'fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
+      { id: 'diff', label: 'Diff', cmd: 'git diff', enabled: true },
+      { id: 'log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
+      { id: 'act-user', label: 'user Git', action: 'user-git', enabled: true }
+    ];
+    this.config.gitActions = defaults;
+    this.renderGitActionsConfig();
+    await window.api.saveConfig(this.config);
+    this.refreshAllGitToolbars();
+  }
+
+  async saveGitActionsConfig() {
+    const rows = this.gitActionsListEl.querySelectorAll('.git-action-config-row');
+    const updated = [];
+
+    rows.forEach((row, i) => {
+      const orig = this.config.gitActions[i] || {};
+      const chk = row.querySelector('.git-action-enable');
+      const inputLabel = row.querySelector('.git-action-input-label');
+      const inputCmd = row.querySelector('.git-action-input-cmd');
+
+      updated.push({
+        id: orig.id || 'act_' + i,
+        label: inputLabel.value.trim() || 'Acción',
+        cmd: orig.action === 'user-git' ? undefined : inputCmd.value.trim(),
+        action: orig.action || undefined,
+        enabled: chk.checked
+      });
+    });
+
+    this.config.gitActions = updated;
+    await window.api.saveConfig(this.config);
+    this.refreshAllGitToolbars();
+    this.modalSettings.classList.add('hidden');
+  }
+
+  refreshAllGitToolbars() {
+    for (const termId of this.terminals.keys()) {
+      const gitActionsEl = document.getElementById(`git-actions-${termId}`);
+      if (gitActionsEl) {
+        this.renderTerminalGitActions(gitActionsEl, termId);
+      }
+    }
   }
 
   // ================= TABS MANAGEMENT =================
@@ -448,7 +748,6 @@ class TuxTerminalApp {
     pane.id = `pane-${node.id}`;
     pane.setAttribute('data-term-id', node.id);
 
-    // Terminal Toolbar Header (Light gray styled as in user's image)
     const header = document.createElement('div');
     header.className = 'terminal-header';
     header.id = `header-${node.id}`;
@@ -473,17 +772,7 @@ class TuxTerminalApp {
       await this.handleSwitchShell(node.id, chosenPath);
     });
 
-    // 3. Blue Link Button
-    const linkBtn = document.createElement('button');
-    linkBtn.className = 'tb-link-btn';
-    linkBtn.innerHTML = '🔗';
-    linkBtn.title = 'Terminal vinculada / Enfocar';
-    linkBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.setActiveTerminal(node.id);
-    });
-
-    // 4. Git Branch Button & Dropdown wrapper
+    // 3. Git Branch Button & Dropdown wrapper
     const gitBranchWrapper = document.createElement('div');
     gitBranchWrapper.className = 'tb-git-branch-wrapper';
     gitBranchWrapper.id = `git-branch-wrapper-${node.id}`;
@@ -510,7 +799,7 @@ class TuxTerminalApp {
     gitBranchWrapper.appendChild(gitBranchBtn);
     gitBranchWrapper.appendChild(gitDropdown);
 
-    // 5. Git User Button
+    // 4. Git User Button
     const gitUserBtn = document.createElement('button');
     gitUserBtn.className = 'tb-git-user-btn';
     gitUserBtn.id = `git-user-btn-${node.id}`;
@@ -521,44 +810,11 @@ class TuxTerminalApp {
       this.openGitUserModal(node.id);
     });
 
-    // 6. Git Action Quick Buttons (Status, Add, Unstage, Commit, Push, Pull, Fetch, Diff, Log, user Git)
+    // 5. Configurable Git Action Buttons
     const gitActions = document.createElement('div');
     gitActions.className = 'tb-git-actions';
     gitActions.id = `git-actions-${node.id}`;
-
-    const actionsList = [
-      { label: 'Status', cmd: 'git status\r' },
-      { label: 'Add', cmd: 'git add -A\r' },
-      { label: 'Unstage', cmd: 'git reset\r' },
-      { label: 'Commit', action: 'commit' },
-      { label: 'Push', cmd: 'git push\r' },
-      { label: 'Pull', cmd: 'git pull\r' },
-      { label: 'Fetch', cmd: 'git fetch\r' },
-      { label: 'Diff', cmd: 'git diff\r' },
-      { label: 'Log', cmd: 'git log --oneline -n 10\r' },
-      { label: 'user Git', action: 'user-git' }
-    ];
-
-    actionsList.forEach((act) => {
-      const btn = document.createElement('button');
-      btn.className = 'tb-git-action-btn';
-      btn.textContent = act.label;
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.setActiveTerminal(node.id);
-        if (act.cmd) {
-          window.api.writeTerminal(node.id, act.cmd);
-        } else if (act.action === 'commit') {
-          const msg = prompt('Mensaje de commit:');
-          if (msg && msg.trim()) {
-            window.api.writeTerminal(node.id, `git commit -m "${msg.replace(/"/g, '\\"')}"\r`);
-          }
-        } else if (act.action === 'user-git') {
-          this.openGitUserModal(node.id);
-        }
-      });
-      gitActions.appendChild(btn);
-    });
+    this.renderTerminalGitActions(gitActions, node.id);
 
     // Fallback badge if folder is not git
     const nonGitBadge = document.createElement('span');
@@ -568,7 +824,6 @@ class TuxTerminalApp {
 
     leftGroup.appendChild(termLabel);
     leftGroup.appendChild(shellSelect);
-    leftGroup.appendChild(linkBtn);
     leftGroup.appendChild(gitBranchWrapper);
     leftGroup.appendChild(gitUserBtn);
     leftGroup.appendChild(gitActions);
@@ -640,7 +895,6 @@ class TuxTerminalApp {
     header.appendChild(leftGroup);
     header.appendChild(rightGroup);
 
-    // Terminal Body Container for xterm
     const body = document.createElement('div');
     body.className = 'terminal-body';
     body.id = `body-${node.id}`;
@@ -660,10 +914,51 @@ class TuxTerminalApp {
     return pane;
   }
 
+  renderTerminalGitActions(containerEl, termId) {
+    containerEl.innerHTML = '';
+    const actions = (this.config && this.config.gitActions) || [];
+
+    actions.forEach((act) => {
+      if (act.enabled === false) return;
+
+      const btn = document.createElement('button');
+      btn.className = 'tb-git-action-btn';
+      btn.textContent = act.label;
+      btn.title = act.cmd || act.label;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.setActiveTerminal(termId);
+
+        if (act.action === 'user-git') {
+          this.openGitUserModal(termId);
+          return;
+        }
+
+        if (act.cmd) {
+          let command = act.cmd;
+          // Check for prompt placeholder: {prompt:Prompt Message}
+          const promptMatch = command.match(/\{prompt(?::([^}]+))?\}/);
+          if (promptMatch) {
+            const promptMsg = promptMatch[1] || 'Ingresa el valor:';
+            const userVal = prompt(promptMsg);
+            if (userVal === null) return; // User cancelled
+            command = command.replace(promptMatch[0], userVal.replace(/"/g, '\\"'));
+          }
+
+          window.api.writeTerminal(termId, `${command}\r`);
+          setTimeout(() => this.refreshGitInfo(termId), 500);
+        }
+      });
+
+      containerEl.appendChild(btn);
+    });
+  }
+
   populateShellSelect(selectEl, termId) {
     selectEl.innerHTML = '';
     const inst = this.terminals.get(termId);
-    const activeShellPath = inst ? inst.shellPath : (this.availableShells[0]?.path || '');
+    const activeShellPath = inst ? inst.shellPath : (this.config?.defaultShell || this.availableShells[0]?.path || '');
 
     this.availableShells.forEach((sh) => {
       const opt = document.createElement('option');
@@ -745,7 +1040,6 @@ class TuxTerminalApp {
       return;
     }
 
-    // List branches
     (gitInfo.branches || [gitInfo.branch]).forEach((bName) => {
       const item = document.createElement('div');
       item.className = `tb-git-dropdown-item ${bName === gitInfo.branch ? 'active' : ''}`;
@@ -761,7 +1055,6 @@ class TuxTerminalApp {
       dropdownEl.appendChild(item);
     });
 
-    // New Branch option
     const newBranchItem = document.createElement('div');
     newBranchItem.className = 'tb-git-dropdown-item new-branch';
     newBranchItem.innerHTML = '➕ Nueva rama...';
@@ -818,28 +1111,15 @@ class TuxTerminalApp {
       return;
     }
 
+    const termTheme = this.getXtermTheme(this.config?.theme || 'dark');
     const term = new TerminalClass({
-      theme: {
-        background: '#0c0d12',
-        foreground: '#e2e8f0',
-        cursor: '#00adb5',
-        cursorAccent: '#0c0d12',
-        selectionBackground: 'rgba(0, 173, 181, 0.3)',
-        black: '#121317',
-        red: '#ef4444',
-        green: '#10b981',
-        yellow: '#ffb703',
-        blue: '#3a86ff',
-        magenta: '#8b5cf6',
-        cyan: '#00adb5',
-        white: '#ffffff'
-      },
-      fontFamily: 'Consolas, "Fira Code", monospace',
-      fontSize: 13,
+      theme: termTheme,
+      fontFamily: this.config?.fontFamily || 'Consolas, "Fira Code", monospace',
+      fontSize: this.config?.fontSize || 13,
       lineHeight: 1.2,
       cursorBlink: true,
       cursorStyle: 'block',
-      scrollback: 5000,
+      scrollback: this.config?.scrollback || 5000,
       allowTransparency: true
     });
 
@@ -854,20 +1134,19 @@ class TuxTerminalApp {
 
     const cols = term.cols || 80;
     const rows = term.rows || 24;
-    const defaultShell = this.availableShells[0]?.path || null;
+    const chosenShell = node.shellPath || this.config?.defaultShell || null;
 
     try {
       const ptyResult = await window.api.createTerminal({
         id: node.id,
         cols,
         rows,
-        shellPath: node.shellPath || defaultShell,
+        shellPath: chosenShell,
         initialCommand: node.initialCommand || null
       });
 
       term.onData((data) => {
         window.api.writeTerminal(node.id, data);
-        // On Enter or prompt submit, trigger git check quickly
         if (data.includes('\r')) {
           setTimeout(() => this.refreshGitInfo(node.id), 400);
         }
@@ -894,7 +1173,6 @@ class TuxTerminalApp {
 
       this.terminals.set(node.id, termInfo);
 
-      // Select matching shell in the dropdown
       const shellSelect = document.getElementById(`shell-select-${node.id}`);
       if (shellSelect) {
         shellSelect.value = ptyResult.shellPath;
