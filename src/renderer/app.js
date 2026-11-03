@@ -858,6 +858,7 @@ class TuxTerminalApp {
     // 1. "Terminal" label
     const termLabel = document.createElement('span');
     termLabel.className = 'tb-label';
+    termLabel.id = `tb-label-${node.id}`;
     termLabel.textContent = 'Terminal';
 
     // 2. Shell dropdown select
@@ -1141,6 +1142,7 @@ class TuxTerminalApp {
   updateToolbarSshStatus(termId) {
     const inst = this.terminals.get(termId);
     const sshBadge = document.getElementById(`ssh-badge-${termId}`);
+    const termLabel = document.getElementById(`tb-label-${termId}`);
     const shellSelect = document.getElementById(`shell-select-${termId}`);
     const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
     const userBtn = document.getElementById(`git-user-btn-${termId}`);
@@ -1162,11 +1164,9 @@ class TuxTerminalApp {
       sshBadge.classList.remove('hidden');
       if (headerEl) headerEl.classList.add('header-ssh');
 
-      // Lock local shell select while in remote SSH
-      if (shellSelect) {
-        shellSelect.disabled = true;
-        shellSelect.title = 'Terminal remota SSH (no se puede cambiar el shell local durante la conexión)';
-      }
+      // Hide local shell select and label while in remote SSH
+      if (termLabel) termLabel.classList.add('hidden');
+      if (shellSelect) shellSelect.classList.add('hidden');
 
       // In remote SSH, hide local git branch and user config
       if (branchWrapper) branchWrapper.classList.add('hidden');
@@ -1191,10 +1191,9 @@ class TuxTerminalApp {
       sshBadge.classList.add('hidden');
       if (headerEl) headerEl.classList.remove('header-ssh');
 
-      if (shellSelect) {
-        shellSelect.disabled = false;
-        shellSelect.title = 'Cambiar tipo de terminal local';
-      }
+      // Restore local shell select and label
+      if (termLabel) termLabel.classList.remove('hidden');
+      if (shellSelect) shellSelect.classList.remove('hidden');
 
       this.refreshGitInfo(termId);
     }
