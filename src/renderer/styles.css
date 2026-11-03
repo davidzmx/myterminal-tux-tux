@@ -834,7 +834,7 @@ body, html {
   margin-top: 4px;
 }
 
-/* Git Actions Configurator */
+/* Git Actions Table Configurator */
 .git-actions-header {
   display: flex;
   justify-content: space-between;
@@ -849,24 +849,61 @@ body, html {
   flex-shrink: 0;
 }
 
+.git-table-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 6px 6px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.col-vis {
+  width: 44px;
+  text-align: center;
+}
+
+.col-name {
+  width: 140px;
+}
+
+.col-cmd {
+  flex: 1;
+}
+
+.col-ops {
+  width: 80px;
+  text-align: right;
+}
+
 .git-actions-config-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 340px;
+  max-height: 320px;
   overflow-y: auto;
   margin-bottom: 12px;
-  padding-right: 4px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .git-action-config-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  background-color: var(--bg-darkest);
+  padding: 6px 10px;
+  background-color: var(--bg-panel);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-top: none;
+  transition: background-color 0.15s;
+}
+
+.git-action-config-row:hover {
+  background-color: var(--bg-hover);
 }
 
 .git-action-enable {
@@ -876,11 +913,22 @@ body, html {
 }
 
 .git-action-input-label {
-  width: 110px;
+  width: 140px !important;
+  font-weight: 500;
 }
 
 .git-action-input-cmd {
-  flex: 1;
+  flex: 1 !important;
+  font-family: monospace !important;
+  color: var(--accent-cyan) !important;
+}
+
+.git-action-row-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 80px;
+  justify-content: flex-end;
 }
 
 /* Password Input with eye toggle button */

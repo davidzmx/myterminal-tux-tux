@@ -63,9 +63,12 @@ class TuxTerminalApp {
 
     // Edit Single Git Action Form
     this.editGitActionForm = document.getElementById('edit-git-action-form');
+    this.editGitModalTitle = document.getElementById('edit-git-modal-title');
+    this.editGitModalIcon = document.getElementById('edit-git-modal-icon');
     this.editGitActionIdInput = document.getElementById('edit-git-action-id');
     this.editGitActionLabelInput = document.getElementById('edit-git-action-label');
     this.editGitActionCmdInput = document.getElementById('edit-git-action-cmd');
+    this.groupEditGitCmd = document.getElementById('group-edit-git-cmd');
 
     // SSH Form elements
     this.sshForm = document.getElementById('ssh-profile-form');
@@ -240,12 +243,13 @@ class TuxTerminalApp {
       await this.saveGeneralConfig();
     });
 
+    // Button: + Nueva Acción (Opens clean modal to enter Name & Command)
     document.getElementById('btn-add-git-action').addEventListener('click', () => {
-      this.addNewGitAction();
+      this.openCreateGitActionModal();
     });
 
     document.getElementById('btn-reset-git-actions').addEventListener('click', async () => {
-      if (confirm('¿Restaurar las acciones Git predeterminadas?')) {
+      if (confirm('¿Restaurar todas las acciones y comandos Git predeterminados?')) {
         await this.resetDefaultGitActions();
       }
     });
@@ -261,13 +265,34 @@ class TuxTerminalApp {
       const newLabel = this.editGitActionLabelInput.value.trim();
       const newCmd = this.editGitActionCmdInput.value.trim();
 
-      const action = this.config.gitActions.find((a) => a.id === actionId);
-      if (action) {
-        action.label = newLabel;
-        action.cmd = newCmd;
-        await window.api.saveConfig(this.config);
-        this.refreshAllGitToolbars();
+      if (!newLabel) {
+        alert('Por favor ingresa un nombre para el botón.');
+        return;
       }
+
+      if (actionId) {
+        // Edit existing
+        const action = this.config.gitActions.find((a) => a.id === actionId);
+        if (action) {
+          action.label = newLabel;
+          if (action.action !== 'user-git') {
+            action.cmd = newCmd;
+          }
+        }
+      } else {
+        // Create new
+        if (!this.config.gitActions) this.config.gitActions = [];
+        this.config.gitActions.push({
+          id: 'act_' + Math.random().toString(36).substring(2, 8),
+          label: newLabel,
+          cmd: newCmd || 'git ',
+          enabled: true
+        });
+      }
+
+      await window.api.saveConfig(this.config);
+      this.renderGitActionsConfig();
+      this.refreshAllGitToolbars();
       this.modalEditGitAction.classList.add('hidden');
     });
 
@@ -452,55 +477,94 @@ class TuxTerminalApp {
       const row = document.createElement('div');
       row.className = 'git-action-config-row';
 
+      // Checkbox
       const chk = document.createElement('input');
       chk.type = 'checkbox';
-      chk.className = 'git-action-enable';
+      chk.className = 'git-action-enable col-vis';
       chk.checked = act.enabled !== false;
       chk.title = 'Mostrar botón en la barra';
 
+      // Label input
       const inputLabel = document.createElement('input');
       inputLabel.type = 'text';
-      inputLabel.className = 'git-action-input-label';
+      inputLabel.className = 'git-action-input-label col-name';
       inputLabel.value = act.label || '';
       inputLabel.placeholder = 'Etiqueta';
 
+      // Command input
       const inputCmd = document.createElement('input');
       inputCmd.type = 'text';
-      inputCmd.className = 'git-action-input-cmd';
-      inputCmd.value = act.cmd || (act.action === 'user-git' ? '(Acción: Cambiar usuario)' : '');
-      inputCmd.placeholder = 'Comando git exacto';
+      inputCmd.className = 'git-action-input-cmd col-cmd';
+      inputCmd.value = act.cmd || (act.action === 'user-git' ? '(Abre ventana de usuario Git)' : '');
+      inputCmd.placeholder = 'Comando git exacto (ej. git status)';
       if (act.action === 'user-git') {
         inputCmd.readOnly = true;
       }
 
+      // Buttons container
+      const btnsBox = document.createElement('div');
+      btnsBox.className = 'git-action-row-btns col-ops';
+
+      // Edit dialog button
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button';
+      btnEdit.className = 'btn btn-sm btn-primary';
+      btnEdit.innerHTML = '✏️';
+      btnEdit.title = 'Editar en ventana dedicada';
+      btnEdit.addEventListener('click', () => {
+        this.openEditSingleGitActionModal(act);
+      });
+
+      // Delete button
       const btnDel = document.createElement('button');
       btnDel.type = 'button';
       btnDel.className = 'btn btn-sm btn-danger';
-      btnDel.innerHTML = '✕';
+      btnDel.innerHTML = '🗑️';
       btnDel.title = 'Eliminar acción';
       btnDel.addEventListener('click', () => {
         this.config.gitActions.splice(index, 1);
         this.renderGitActionsConfig();
       });
 
+      btnsBox.appendChild(btnEdit);
+      btnsBox.appendChild(btnDel);
+
       row.appendChild(chk);
       row.appendChild(inputLabel);
       row.appendChild(inputCmd);
-      row.appendChild(btnDel);
+      row.appendChild(btnsBox);
 
       this.gitActionsListEl.appendChild(row);
     });
   }
 
-  addNewGitAction() {
-    if (!this.config.gitActions) this.config.gitActions = [];
-    this.config.gitActions.push({
-      id: 'act_' + Math.random().toString(36).substring(2, 7),
-      label: 'Nuevo',
-      cmd: 'git ',
-      enabled: true
-    });
-    this.renderGitActionsConfig();
+  openCreateGitActionModal() {
+    this.editGitModalIcon.textContent = '➕';
+    this.editGitModalTitle.textContent = 'Nueva Acción Git';
+    this.editGitActionIdInput.value = '';
+    this.editGitActionLabelInput.value = '';
+    this.editGitActionCmdInput.value = 'git ';
+    this.editGitActionCmdInput.readOnly = false;
+    this.modalEditGitAction.classList.remove('hidden');
+    this.editGitActionLabelInput.focus();
+  }
+
+  openEditSingleGitActionModal(act) {
+    this.editGitModalIcon.textContent = '✏️';
+    this.editGitModalTitle.textContent = `Editar Acción: ${act.label}`;
+    this.editGitActionIdInput.value = act.id;
+    this.editGitActionLabelInput.value = act.label;
+    this.editGitActionCmdInput.value = act.cmd || '';
+
+    if (act.action === 'user-git') {
+      this.editGitActionCmdInput.readOnly = true;
+      this.editGitActionCmdInput.value = '(Abre ventana de usuario Git)';
+    } else {
+      this.editGitActionCmdInput.readOnly = false;
+    }
+
+    this.modalEditGitAction.classList.remove('hidden');
+    this.editGitActionLabelInput.focus();
   }
 
   async resetDefaultGitActions() {
@@ -509,16 +573,16 @@ class TuxTerminalApp {
       { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
       { id: 'act-unstage', label: 'Unstage', cmd: 'git reset', enabled: true },
       { id: 'act-commit', label: 'Commit', cmd: 'git commit -m "{prompt:Mensaje de commit}"', enabled: true },
-      { id: 'act-push', label: 'Push', cmd: 'git push', enabled: true },
-      { id: 'act-pull', label: 'Pull', cmd: 'git pull', enabled: true },
-      { id: 'act-fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
-      { id: 'act-diff', label: 'Diff', cmd: 'git diff', enabled: true },
-      { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
+      { id: 'push', label: 'Push', cmd: 'git push', enabled: true },
+      { id: 'pull', label: 'Pull', cmd: 'git pull', enabled: true },
+      { id: 'fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
+      { id: 'diff', label: 'Diff', cmd: 'git diff', enabled: true },
+      { id: 'log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
       { id: 'act-user', label: 'user Git', action: 'user-git', enabled: true }
     ];
     this.config.gitActions = defaults;
-    this.renderGitActionsConfig();
     await window.api.saveConfig(this.config);
+    this.renderGitActionsConfig();
     this.refreshAllGitToolbars();
   }
 
@@ -554,19 +618,6 @@ class TuxTerminalApp {
         this.renderTerminalGitActions(gitActionsEl, termId);
       }
     }
-  }
-
-  openEditSingleGitActionModal(act) {
-    this.editGitActionIdInput.value = act.id;
-    this.editGitActionLabelInput.value = act.label;
-    this.editGitActionCmdInput.value = act.cmd || '';
-    if (act.action === 'user-git') {
-      this.editGitActionCmdInput.readOnly = true;
-      this.editGitActionCmdInput.value = '(Abre ventana de usuario Git)';
-    } else {
-      this.editGitActionCmdInput.readOnly = false;
-    }
-    this.modalEditGitAction.classList.remove('hidden');
   }
 
   // ================= TABS MANAGEMENT =================
@@ -935,7 +986,6 @@ class TuxTerminalApp {
     });
 
     pane.addEventListener('contextmenu', (e) => {
-      // Don't intercept right click if target is a git button
       if (e.target.closest('.tb-git-action-btn')) return;
       e.preventDefault();
       this.showContextMenu(e.clientX, e.clientY, node.id);
@@ -1422,7 +1472,7 @@ class TuxTerminalApp {
 
     const timeoutId = setTimeout(() => {
       cleanup();
-    }, 30000); // 30s timeout
+    }, 30000);
 
     const cleanup = () => {
       clearTimeout(timeoutId);
@@ -1434,7 +1484,6 @@ class TuxTerminalApp {
 
     const unsub = window.api.onTerminalData(termId, (data) => {
       buffer += data;
-      // Match password / passphrase prompts
       const isPrompt = /(password|passphrase|contraseña|password for [^:]+):\s*$/i.test(buffer.trim());
       if (isPrompt && !answered) {
         answered = true;

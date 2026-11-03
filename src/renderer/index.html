@@ -57,7 +57,7 @@
         <span id="active-term-info">Terminal activa: Ninguna</span>
       </div>
       <div class="shortcuts-hint">
-        <span>Click derecho: <b>Menú Dividir / SSH</b> • Click derecho en botones Git: <b>Editar comando</b></span>
+        <span>Click derecho en terminal: <b>Dividir / SSH</b> • Click derecho en botón Git: <b>Editar comando</b></span>
       </div>
     </footer>
   </div>
@@ -91,31 +91,39 @@
     </div>
   </div>
 
-  <!-- Modal: Edit Single Git Action Command (Quick edit on right-click) -->
+  <!-- Modal: Create / Edit Git Action (Dedicated Dialog) -->
   <div id="modal-edit-git-action" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-dialog">
       <div class="modal-header">
         <div class="modal-title">
-          <span class="modal-icon">✏️</span> Configurar Comando del Botón Git
+          <span class="modal-icon" id="edit-git-modal-icon">✏️</span> 
+          <span id="edit-git-modal-title">Editar Acción Git</span>
         </div>
         <button class="modal-close" data-close-modal="modal-edit-git-action">&times;</button>
       </div>
       <div class="modal-body">
         <form id="edit-git-action-form">
           <input type="hidden" id="edit-git-action-id" value="">
+          
           <div class="form-group">
-            <label for="edit-git-action-label">Nombre / Etiqueta del Botón</label>
-            <input type="text" id="edit-git-action-label" required placeholder="Ej. Status, Push, Stash...">
+            <label for="edit-git-action-label">Nombre / Etiqueta que se verá en el botón *</label>
+            <input type="text" id="edit-git-action-label" required placeholder="Ej: Status, Push, Stash, Checkout Main...">
+            <small class="form-hint">Este es el texto que aparece en la barra superior de la terminal.</small>
           </div>
-          <div class="form-group">
-            <label for="edit-git-action-cmd">Comando Git a Ejecutar</label>
-            <input type="text" id="edit-git-action-cmd" required placeholder="Ej. git status, git push origin, git stash...">
-            <small class="form-hint">Tip: Usa <code>{prompt:Tu pregunta}</code> si quieres que te pida un texto antes de ejecutarlo (como un mensaje de commit).</small>
+
+          <div class="form-group" id="group-edit-git-cmd">
+            <label for="edit-git-action-cmd">Comando Git a ejecutar en la consola *</label>
+            <input type="text" id="edit-git-action-cmd" required placeholder="Ej: git status, git push origin, git stash...">
+            <small class="form-hint">
+              Puedes usar <code>{prompt:Pregunta}</code> si quieres que pida un texto antes de ejecutarlo.<br>
+              Ejemplo: <code>git commit -m "{prompt:Mensaje de commit}"</code>
+            </small>
           </div>
+
           <div class="form-actions">
             <button type="button" class="btn" data-close-modal="modal-edit-git-action">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-single-git-action">Guardar Acción</button>
           </div>
         </form>
       </div>
@@ -181,7 +189,7 @@
 
             <div class="form-actions">
               <span></span>
-              <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+              <button type="submit" class="btn btn-primary">Guardar Configuración General</button>
             </div>
           </form>
         </div>
@@ -191,7 +199,7 @@
           <div class="git-actions-header">
             <div>
               <p class="modal-subtitle" style="margin-bottom: 4px;">Edita las etiquetas, comandos y visibilidad de los botones de Git en la barra superior.</p>
-              <small class="form-hint" style="margin-top:0;">Tip: Usa <code>{prompt:Pregunta}</code> para pedir texto interactivo antes de ejecutar.</small>
+              <small class="form-hint" style="margin-top:0;">Tip: Haz clic en <b>✏️ Editar</b> para modificar cualquier comando o haz clic en <b>+ Nueva Acción</b> para crear uno nuevo.</small>
             </div>
             <div class="git-actions-top-btns">
               <button id="btn-add-git-action" class="btn btn-sm btn-primary">+ Nueva Acción</button>
@@ -199,11 +207,19 @@
             </div>
           </div>
 
+          <!-- Table Header -->
+          <div class="git-table-header">
+            <span class="col-vis">Visible</span>
+            <span class="col-name">Nombre Botón</span>
+            <span class="col-cmd">Comando Git a Ejecutar</span>
+            <span class="col-ops">Acciones</span>
+          </div>
+
           <div id="git-actions-list" class="git-actions-config-list"></div>
 
           <div class="form-actions">
             <span></span>
-            <button id="btn-save-git-actions" class="btn btn-primary">Guardar Acciones Git</button>
+            <button id="btn-save-git-actions" class="btn btn-primary">Guardar Cambios de Git</button>
           </div>
         </div>
       </div>
