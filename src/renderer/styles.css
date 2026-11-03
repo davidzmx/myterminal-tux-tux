@@ -387,6 +387,56 @@ body, html {
   border-color: #4b5563;
 }
 
+/* SSH Connection Active Badge */
+.tb-ssh-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #dbeafe;
+  border: 1px solid #3b82f6;
+  color: #1e40af;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  height: 24px;
+  white-space: nowrap;
+}
+
+body.theme-dark .tb-ssh-badge {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+}
+
+.ssh-badge-name {
+  font-weight: bold;
+}
+
+.ssh-badge-host {
+  font-family: monospace;
+  opacity: 0.9;
+  font-size: 10px;
+}
+
+.ssh-disconnect-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: var(--accent-red);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  margin-left: 4px;
+  font-weight: bold;
+  transition: all 0.15s;
+}
+
+.ssh-disconnect-btn:hover {
+  background: var(--accent-red);
+  color: #ffffff;
+}
+
 /* Git Branch Pill Button */
 .tb-git-branch-wrapper {
   position: relative;

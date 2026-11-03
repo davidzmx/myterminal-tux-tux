@@ -853,6 +853,22 @@ class TuxTerminalApp {
       await this.handleSwitchShell(node.id, chosenPath);
     });
 
+    // 2.5 SSH Active Badge (Shown when connected to an SSH profile)
+    const sshBadge = document.createElement('div');
+    sshBadge.className = 'tb-ssh-badge hidden';
+    sshBadge.id = `ssh-badge-${node.id}`;
+    sshBadge.innerHTML = `
+      <span>🔑</span>
+      <span class="ssh-badge-name" id="ssh-badge-name-${node.id}"></span>
+      <span class="ssh-badge-host" id="ssh-badge-host-${node.id}"></span>
+      <button type="button" class="ssh-disconnect-btn" id="ssh-disconnect-${node.id}" title="Desconectar y volver a local">✕ Salir</button>
+    `;
+
+    sshBadge.querySelector('.ssh-disconnect-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.disconnectSshSession(node.id);
+    });
+
     // 3. Git Branch Button & Dropdown wrapper
     const gitBranchWrapper = document.createElement('div');
     gitBranchWrapper.className = 'tb-git-branch-wrapper';
@@ -905,6 +921,7 @@ class TuxTerminalApp {
 
     leftGroup.appendChild(termLabel);
     leftGroup.appendChild(shellSelect);
+    leftGroup.appendChild(sshBadge);
     leftGroup.appendChild(gitBranchWrapper);
     leftGroup.appendChild(gitUserBtn);
     leftGroup.appendChild(gitActions);
@@ -993,6 +1010,10 @@ class TuxTerminalApp {
       this.showContextMenu(e.clientX, e.clientY, node.id);
     });
 
+    setTimeout(() => {
+      this.updateToolbarSshStatus(node.id);
+    }, 0);
+
     return pane;
   }
 
@@ -1066,6 +1087,8 @@ class TuxTerminalApp {
 
     this.setActiveTerminal(termId);
     inst.shellPath = newShellPath;
+    inst.sshSession = null;
+    this.updateToolbarSshStatus(termId);
 
     if (inst.term) {
       inst.term.clear();
@@ -1083,11 +1106,58 @@ class TuxTerminalApp {
     }
   }
 
+  // ================= SSH & GIT TOOLBAR STATUS =================
+  updateToolbarSshStatus(termId) {
+    const inst = this.terminals.get(termId);
+    const sshBadge = document.getElementById(`ssh-badge-${termId}`);
+    const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
+    const userBtn = document.getElementById(`git-user-btn-${termId}`);
+    const gitActions = document.getElementById(`git-actions-${termId}`);
+    const nonGitBadge = document.getElementById(`non-git-${termId}`);
+
+    if (!sshBadge) return;
+
+    if (inst && inst.sshSession) {
+      const sess = inst.sshSession;
+      const nameEl = document.getElementById(`ssh-badge-name-${termId}`);
+      const hostEl = document.getElementById(`ssh-badge-host-${termId}`);
+      if (nameEl) nameEl.textContent = sess.name;
+      const portStr = (sess.port && Number(sess.port) !== 22) ? `:${sess.port}` : '';
+      if (hostEl) hostEl.textContent = `(${sess.username}@${sess.host}${portStr})`;
+
+      sshBadge.classList.remove('hidden');
+
+      if (branchWrapper) branchWrapper.classList.add('hidden');
+      if (userBtn) userBtn.classList.add('hidden');
+      if (gitActions) gitActions.classList.add('hidden');
+      if (nonGitBadge) nonGitBadge.classList.add('hidden');
+    } else {
+      sshBadge.classList.add('hidden');
+      this.refreshGitInfo(termId);
+    }
+    this.updateStatusBar();
+  }
+
+  disconnectSshSession(termId) {
+    window.api.writeTerminal(termId, 'exit\r');
+    const inst = this.terminals.get(termId);
+    if (inst) {
+      inst.sshSession = null;
+      inst.title = 'Terminal';
+    }
+    this.updateToolbarSshStatus(termId);
+  }
+
   // ================= GIT INFORMATION & BRANCHES =================
   async refreshGitInfo(termId) {
     try {
-      const gitInfo = await window.api.getGitInfo(termId);
       const inst = this.terminals.get(termId);
+      if (inst && inst.sshSession) {
+        this.updateToolbarSshStatus(termId);
+        return;
+      }
+
+      const gitInfo = await window.api.getGitInfo(termId);
       if (inst) inst.gitInfo = gitInfo;
 
       const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
@@ -1248,6 +1318,14 @@ class TuxTerminalApp {
 
       const unsubData = window.api.onTerminalData(node.id, (data) => {
         term.write(data);
+        const curInst = this.terminals.get(node.id);
+        if (curInst && curInst.sshSession) {
+          if (/(Connection to [^\r\n]+ closed|Cerrada la conexi[oó]n a|Connection closed by|logout\r?\n|Killed by signal)/i.test(data)) {
+            curInst.sshSession = null;
+            curInst.title = 'Terminal';
+            this.updateToolbarSshStatus(node.id);
+          }
+        }
       });
 
       const unsubExit = window.api.onTerminalExit(node.id, ({ exitCode }) => {
@@ -1263,6 +1341,7 @@ class TuxTerminalApp {
         unsubExit,
         title: node.title || 'Terminal',
         gitInfo: null,
+        sshSession: null,
         sshPwdListener: null
       };
 
@@ -1523,8 +1602,10 @@ class TuxTerminalApp {
 
     const inst = this.terminals.get(termId);
     if (inst) {
-      inst.title = `SSH: ${profile.name}`;
+      inst.sshSession = profile;
+      inst.title = `SSH: ${profile.name} (${profile.host})`;
     }
+    this.updateToolbarSshStatus(termId);
     this.updateStatusBar();
   }
 
