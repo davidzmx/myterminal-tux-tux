@@ -330,11 +330,56 @@ class TuxTerminalApp {
     this.btnSshConnectActive.addEventListener('click', () => {
       const profile = this.getSelectedFormProfile();
       if (profile && this.activeTerminalId) {
-        this.connectSshProfile(this.activeTerminalId, profile);
+        this.handleSshProfileSelection(this.activeTerminalId, profile);
         this.modalSsh.classList.add('hidden');
       } else if (!this.activeTerminalId) {
         alert('Selecciona o haz clic en una terminal primero.');
       }
+    });
+
+    this.modalSshSwitch = document.getElementById('modal-ssh-switch');
+
+    document.getElementById('btn-ssh-switch-replace').addEventListener('click', () => {
+      this.modalSshSwitch.classList.add('hidden');
+      const termId = this.sshSwitchTermId;
+      const targetProfile = this.sshSwitchTargetProfile;
+      if (!termId || !targetProfile) return;
+
+      const inst = this.terminals.get(termId);
+      if (inst) {
+        window.api.writeTerminal(termId, 'exit\r');
+        inst.sshSession = null;
+        inst.sshShowGit = false;
+        this.updateToolbarSshStatus(termId);
+      }
+      setTimeout(() => {
+        this.connectSshProfile(termId, targetProfile);
+      }, 400);
+    });
+
+    document.getElementById('btn-ssh-switch-split').addEventListener('click', () => {
+      this.modalSshSwitch.classList.add('hidden');
+      const termId = this.sshSwitchTermId;
+      const targetProfile = this.sshSwitchTargetProfile;
+      if (!termId || !targetProfile) return;
+
+      this.splitTerminal(termId, 'vertical');
+      const newTermId = this.activeTerminalId;
+      setTimeout(() => {
+        this.connectSshProfile(newTermId, targetProfile);
+      }, 350);
+    });
+
+    document.getElementById('btn-ssh-switch-tab').addEventListener('click', () => {
+      this.modalSshSwitch.classList.add('hidden');
+      const targetProfile = this.sshSwitchTargetProfile;
+      if (!targetProfile) return;
+
+      this.addNewTab(targetProfile.name);
+      const newTermId = this.activeTerminalId;
+      setTimeout(() => {
+        this.connectSshProfile(newTermId, targetProfile);
+      }, 350);
     });
 
     document.getElementById('btn-ssh-add-new').addEventListener('click', () => {
@@ -371,6 +416,9 @@ class TuxTerminalApp {
       }
       if (!e.target.closest('.tb-git-branch-wrapper')) {
         document.querySelectorAll('.tb-git-dropdown.show').forEach((m) => m.classList.remove('show'));
+      }
+      if (!e.target.closest('.tb-git-overflow-wrapper')) {
+        document.querySelectorAll('.tb-git-overflow-menu.show').forEach((m) => m.classList.remove('show'));
       }
     });
 
@@ -675,6 +723,7 @@ class TuxTerminalApp {
 
     this.updateStatusBar();
     this.fitAllTerminals();
+    setTimeout(() => this.updateAllGitOverflow(), 50);
   }
 
   closeTab(tabId) {
@@ -938,6 +987,33 @@ class TuxTerminalApp {
     gitActions.id = `git-actions-${node.id}`;
     this.renderTerminalGitActions(gitActions, node.id);
 
+    // 5.5 Overflow Button & Dropdown Menu
+    const gitOverflowWrapper = document.createElement('div');
+    gitOverflowWrapper.className = 'tb-git-overflow-wrapper hidden';
+    gitOverflowWrapper.id = `git-overflow-wrapper-${node.id}`;
+
+    const btnOverflow = document.createElement('button');
+    btnOverflow.type = 'button';
+    btnOverflow.className = 'tb-git-overflow-btn';
+    btnOverflow.id = `git-overflow-btn-${node.id}`;
+    btnOverflow.innerHTML = '&raquo;';
+    btnOverflow.title = 'Más acciones Git';
+
+    const overflowMenu = document.createElement('div');
+    overflowMenu.className = 'tb-git-overflow-menu';
+    overflowMenu.id = `git-overflow-menu-${node.id}`;
+
+    btnOverflow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.tb-git-overflow-menu.show').forEach((m) => {
+        if (m !== overflowMenu) m.classList.remove('show');
+      });
+      overflowMenu.classList.toggle('show');
+    });
+
+    gitOverflowWrapper.appendChild(btnOverflow);
+    gitOverflowWrapper.appendChild(overflowMenu);
+
     // Fallback badge if folder is not git
     const nonGitBadge = document.createElement('span');
     nonGitBadge.className = 'tb-non-git-badge hidden';
@@ -950,6 +1026,7 @@ class TuxTerminalApp {
     leftGroup.appendChild(gitBranchWrapper);
     leftGroup.appendChild(gitUserBtn);
     leftGroup.appendChild(gitActions);
+    leftGroup.appendChild(gitOverflowWrapper);
     leftGroup.appendChild(nonGitBadge);
 
     // Right toolbar tools (Splits, SSH, Close)
@@ -1037,7 +1114,13 @@ class TuxTerminalApp {
 
     setTimeout(() => {
       this.updateToolbarSshStatus(node.id);
+      this.updateGitButtonsOverflow(node.id);
     }, 0);
+
+    const resizeObs = new ResizeObserver(() => {
+      this.updateGitButtonsOverflow(node.id);
+    });
+    resizeObs.observe(header);
 
     return pane;
   }
@@ -1086,8 +1169,13 @@ class TuxTerminalApp {
         this.openEditSingleGitActionModal(act);
       });
 
+      btn._gitActionData = act;
       containerEl.appendChild(btn);
     });
+
+    setTimeout(() => {
+      this.updateGitButtonsOverflow(termId);
+    }, 20);
   }
 
   populateShellSelect(selectEl, termId) {
@@ -1198,6 +1286,7 @@ class TuxTerminalApp {
       this.refreshGitInfo(termId);
     }
 
+    setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
     this.renderTabsNav();
     this.updateStatusBar();
   }
@@ -1247,12 +1336,98 @@ class TuxTerminalApp {
         gitActions.classList.add('hidden');
         if (nonGitBadge) nonGitBadge.classList.remove('hidden');
       }
+
+      setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
     } catch (e) {}
   }
 
   updateAllGitInfo() {
     for (const termId of this.terminals.keys()) {
       this.refreshGitInfo(termId);
+      this.updateGitButtonsOverflow(termId);
+    }
+  }
+
+  // ================= GIT BUTTONS OVERFLOW MENU =================
+  updateGitButtonsOverflow(termId) {
+    const header = document.getElementById(`header-${termId}`);
+    const gitActions = document.getElementById(`git-actions-${termId}`);
+    const overflowWrapper = document.getElementById(`git-overflow-wrapper-${termId}`);
+    const overflowMenu = document.getElementById(`git-overflow-menu-${termId}`);
+    if (!header || !gitActions || !overflowWrapper || !overflowMenu) return;
+
+    if (header.clientWidth === 0 || gitActions.classList.contains('hidden')) {
+      overflowWrapper.classList.add('hidden');
+      return;
+    }
+
+    const rightGroup = header.querySelector('.tb-right-group');
+    if (!rightGroup) return;
+
+    const actionButtons = Array.from(gitActions.querySelectorAll('.tb-git-action-btn'));
+    if (actionButtons.length === 0) {
+      overflowWrapper.classList.add('hidden');
+      return;
+    }
+
+    // Unhide all buttons temporarily to measure available width
+    actionButtons.forEach((btn) => (btn.style.display = ''));
+    overflowWrapper.classList.remove('hidden');
+    overflowMenu.innerHTML = '';
+
+    const overflowBtn = overflowWrapper.querySelector('.tb-git-overflow-btn');
+    const overflowBtnWidth = overflowBtn ? overflowBtn.offsetWidth + 8 : 32;
+
+    const rightBoundary = rightGroup.getBoundingClientRect().left - 8;
+
+    let overflowStartIndex = -1;
+
+    for (let i = 0; i < actionButtons.length; i++) {
+      const btn = actionButtons[i];
+      const rect = btn.getBoundingClientRect();
+      if (rect.right > rightBoundary - overflowBtnWidth) {
+        overflowStartIndex = i;
+        break;
+      }
+    }
+
+    if (overflowStartIndex !== -1) {
+      for (let i = overflowStartIndex; i < actionButtons.length; i++) {
+        const btn = actionButtons[i];
+        btn.style.display = 'none';
+
+        const actData = btn._gitActionData;
+        const item = document.createElement('div');
+        item.className = 'tb-git-overflow-item';
+        item.textContent = btn.textContent;
+        item.title = btn.title;
+
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          overflowMenu.classList.remove('show');
+          btn.click();
+        });
+
+        item.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          overflowMenu.classList.remove('show');
+          if (actData) {
+            this.openEditSingleGitActionModal(actData);
+          }
+        });
+
+        overflowMenu.appendChild(item);
+      }
+      overflowWrapper.classList.remove('hidden');
+    } else {
+      overflowWrapper.classList.add('hidden');
+    }
+  }
+
+  updateAllGitOverflow() {
+    for (const termId of this.terminals.keys()) {
+      this.updateGitButtonsOverflow(termId);
     }
   }
 
@@ -1701,7 +1876,7 @@ class TuxTerminalApp {
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           menuEl.classList.remove('show');
-          this.connectSshProfile(targetTermId, p);
+          this.handleSshProfileSelection(targetTermId, p);
         });
         menuEl.appendChild(item);
       });
@@ -1716,6 +1891,35 @@ class TuxTerminalApp {
       this.openSshModal();
     });
     menuEl.appendChild(manageItem);
+  }
+
+  handleSshProfileSelection(termId, profile) {
+    const inst = this.terminals.get(termId);
+    if (!inst) return;
+
+    if (inst.sshSession) {
+      if (inst.sshSession.id === profile.id || (inst.sshSession.host === profile.host && inst.sshSession.username === profile.username)) {
+        alert(`Esta terminal ya se encuentra conectada al perfil "${profile.name}" (${profile.host}).`);
+        return;
+      }
+      this.openSshSwitchModal(termId, profile);
+      return;
+    }
+
+    this.connectSshProfile(termId, profile);
+  }
+
+  openSshSwitchModal(termId, targetProfile) {
+    this.sshSwitchTermId = termId;
+    this.sshSwitchTargetProfile = targetProfile;
+
+    const inst = this.terminals.get(termId);
+    const currName = inst?.sshSession ? `${inst.sshSession.name} (${inst.sshSession.username}@${inst.sshSession.host})` : 'la sesión actual';
+
+    document.getElementById('ssh-switch-current-name').textContent = currName;
+    document.getElementById('ssh-switch-target-name').textContent = `${targetProfile.name} (${targetProfile.username}@${targetProfile.host})`;
+
+    this.modalSshSwitch.classList.remove('hidden');
   }
 
   openSshModal() {

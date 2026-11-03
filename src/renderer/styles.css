@@ -700,6 +700,90 @@ body.theme-light .tb-git-action-btn:hover {
   border-color: #cbd5e1;
 }
 
+/* Git Actions Overflow Button & Dropdown Menu */
+.tb-git-overflow-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tb-git-overflow-btn {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 1px 7px;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: bold;
+  border-radius: 3px;
+  cursor: pointer;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+
+.tb-git-overflow-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+body.theme-light .tb-git-overflow-btn {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+body.theme-light .tb-git-overflow-btn:hover {
+  background: #f1f5f9;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.tb-git-overflow-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 3px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+  min-width: 140px;
+  z-index: 600;
+  display: none;
+  padding: 4px 0;
+}
+
+.tb-git-overflow-menu.show {
+  display: block;
+}
+
+.tb-git-overflow-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-main);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.tb-git-overflow-item:hover {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+body.theme-light .tb-git-overflow-item {
+  color: #1e293b;
+}
+
+body.theme-light .tb-git-overflow-item:hover {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
 .tb-non-git-badge {
   font-size: 11px;
   color: var(--text-dim);

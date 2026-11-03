@@ -410,6 +410,41 @@
     </div>
   </div>
 
+  <!-- Modal: Cambiar Conexión SSH (Conflicto de sesión activa) -->
+  <div id="modal-ssh-switch" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" style="max-width: 450px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">🔑</span> Cambiar Conexión SSH
+        </div>
+        <button class="modal-close" data-close-modal="modal-ssh-switch">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 10px; color: var(--text-main); font-size: 13px;">
+          Esta terminal ya está conectada a <b id="ssh-switch-current-name" style="color:var(--accent-cyan)">...</b>.
+        </p>
+        <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 12px;">
+          ¿Cómo deseas conectar al perfil <b id="ssh-switch-target-name" style="color:var(--accent-yellow)">...</b>?
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="button" id="btn-ssh-switch-replace" class="btn btn-primary" style="justify-content: flex-start; padding: 9px 12px;">
+            🔄 Desconectar actual y conectar en esta consola
+          </button>
+          <button type="button" id="btn-ssh-switch-split" class="btn btn-secondary" style="justify-content: flex-start; padding: 9px 12px;">
+            ❚❚ Abrir al lado en nueva terminal (Dividir)
+          </button>
+          <button type="button" id="btn-ssh-switch-tab" class="btn btn-secondary" style="justify-content: flex-start; padding: 9px 12px;">
+            📄 Abrir en una nueva pestaña
+          </button>
+          <button type="button" class="btn btn-secondary" data-close-modal="modal-ssh-switch" style="justify-content: flex-start; padding: 9px 12px; margin-top: 4px;">
+            ✕ Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Core App Scripts -->
   <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
