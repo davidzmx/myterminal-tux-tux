@@ -1522,3 +1522,217 @@ input:focus, select:focus {
   padding: 20px;
   font-style: italic;
 }
+
+/* Git Interactive Modals (Commit, Add, Unstage) */
+.git-options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.git-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: normal;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+.git-checkbox-label input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.git-checkbox-label span {
+  flex: 1;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.git-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.git-files-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.git-files-btn-link {
+  background: transparent;
+  border: none;
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-decoration: underline;
+  border-radius: 3px;
+}
+
+.git-files-btn-link:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #0284c7;
+}
+
+body.theme-light .git-files-btn-link {
+  color: #0284c7;
+}
+
+body.theme-light .git-files-btn-link:hover {
+  background: #e0f2fe;
+}
+
+.git-files-box {
+  max-height: 190px;
+  min-height: 70px;
+  overflow-y: auto;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.git-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s ease;
+  user-select: none;
+}
+
+.git-file-row:hover {
+  background: var(--bg-hover);
+}
+
+.git-file-row input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.git-status-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  text-align: center;
+  min-width: 24px;
+  flex-shrink: 0;
+}
+
+.git-status-badge.badge-modified {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.git-status-badge.badge-untracked {
+  background: #d97706;
+  color: #ffffff;
+}
+
+.git-status-badge.badge-added {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.git-status-badge.badge-deleted {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.git-status-badge.badge-renamed {
+  background: #9333ea;
+  color: #ffffff;
+}
+
+.git-status-badge.badge-staged {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.git-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: Consolas, monospace;
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+.git-file-status-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.git-cmd-preview {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family: Consolas, "Fira Code", monospace;
+  font-size: 12px;
+  color: var(--accent-cyan);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: 4px;
+  line-height: 1.4;
+  user-select: all;
+  min-height: 38px;
+}
+
+body.theme-light .git-cmd-preview {
+  background: #f8fafc;
+  color: #0369a1;
+  border-color: #cbd5e1;
+}
+
+.git-empty-files {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.git-staged-info-banner {
+  padding: 6px 10px;
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(2, 132, 199, 0.3);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 11px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

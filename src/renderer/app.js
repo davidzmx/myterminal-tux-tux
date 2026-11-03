@@ -406,6 +406,8 @@ class TuxTerminalApp {
     const commitForm = document.getElementById('git-commit-form');
     const chkCommitAll = document.getElementById('git-commit-opt-all');
     const chkCommitAmend = document.getElementById('git-commit-opt-amend');
+    const btnCommitSelectAll = document.getElementById('git-commit-select-all');
+    const btnCommitDeselectAll = document.getElementById('git-commit-deselect-all');
 
     if (commitMsgInput) {
       commitMsgInput.addEventListener('input', () => this.updateGitCommitPreview());
@@ -423,11 +425,81 @@ class TuxTerminalApp {
     if (chkCommitAmend) {
       chkCommitAmend.addEventListener('change', () => this.updateGitCommitPreview());
     }
+    if (btnCommitSelectAll) {
+      btnCommitSelectAll.addEventListener('click', () => {
+        document.querySelectorAll('.git-commit-file-chk').forEach(c => (c.checked = true));
+        this.updateGitCommitPreview();
+      });
+    }
+    if (btnCommitDeselectAll) {
+      btnCommitDeselectAll.addEventListener('click', () => {
+        document.querySelectorAll('.git-commit-file-chk').forEach(c => (c.checked = false));
+        this.updateGitCommitPreview();
+      });
+    }
 
     if (commitForm) {
       commitForm.addEventListener('submit', (e) => {
         e.preventDefault();
         this.executeGitCommit();
+      });
+    }
+
+    // Git Add Modal setup
+    this.modalGitAdd = document.getElementById('modal-git-add');
+    const addForm = document.getElementById('git-add-form');
+    const chkAddAll = document.getElementById('git-add-opt-all');
+    const btnAddSelectAll = document.getElementById('git-add-select-all');
+    const btnAddDeselectAll = document.getElementById('git-add-deselect-all');
+
+    if (chkAddAll) {
+      chkAddAll.addEventListener('change', () => this.updateGitAddPreview());
+    }
+    if (btnAddSelectAll) {
+      btnAddSelectAll.addEventListener('click', () => {
+        document.querySelectorAll('.git-add-file-chk').forEach(c => (c.checked = true));
+        this.updateGitAddPreview();
+      });
+    }
+    if (btnAddDeselectAll) {
+      btnAddDeselectAll.addEventListener('click', () => {
+        document.querySelectorAll('.git-add-file-chk').forEach(c => (c.checked = false));
+        this.updateGitAddPreview();
+      });
+    }
+    if (addForm) {
+      addForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.executeGitAdd();
+      });
+    }
+
+    // Git Unstage Modal setup
+    this.modalGitUnstage = document.getElementById('modal-git-unstage');
+    const unstageForm = document.getElementById('git-unstage-form');
+    const chkUnstageAll = document.getElementById('git-unstage-opt-all');
+    const btnUnstageSelectAll = document.getElementById('git-unstage-select-all');
+    const btnUnstageDeselectAll = document.getElementById('git-unstage-deselect-all');
+
+    if (chkUnstageAll) {
+      chkUnstageAll.addEventListener('change', () => this.updateGitUnstagePreview());
+    }
+    if (btnUnstageSelectAll) {
+      btnUnstageSelectAll.addEventListener('click', () => {
+        document.querySelectorAll('.git-unstage-file-chk').forEach(c => (c.checked = true));
+        this.updateGitUnstagePreview();
+      });
+    }
+    if (btnUnstageDeselectAll) {
+      btnUnstageDeselectAll.addEventListener('click', () => {
+        document.querySelectorAll('.git-unstage-file-chk').forEach(c => (c.checked = false));
+        this.updateGitUnstagePreview();
+      });
+    }
+    if (unstageForm) {
+      unstageForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.executeGitUnstage();
       });
     }
 
@@ -1210,6 +1282,18 @@ class TuxTerminalApp {
           return;
         }
 
+        // Dedicated interactive modal for add
+        if (act.action === 'add' || act.id === 'act-add' || act.label.toLowerCase() === 'add' || (act.cmd && act.cmd.trim().startsWith('git add'))) {
+          this.openGitAddModal(termId);
+          return;
+        }
+
+        // Dedicated interactive modal for unstage
+        if (act.action === 'unstage' || act.id === 'act-unstage' || act.label.toLowerCase() === 'unstage' || (act.cmd && (act.cmd.trim().startsWith('git reset') || act.cmd.trim().startsWith('git restore --staged')))) {
+          this.openGitUnstageModal(termId);
+          return;
+        }
+
         if (act.cmd) {
           let command = act.cmd;
           const promptMatch = command.match(/\{prompt(?::([^}]+))?\}/);
@@ -1412,23 +1496,120 @@ class TuxTerminalApp {
   }
 
   // ================= GIT COMMIT MODAL =================
-  openGitCommitModal(termId) {
+  async openGitCommitModal(termId) {
     this.gitCommitTargetTermId = termId;
     const msgInput = document.getElementById('git-commit-msg');
     const chkAll = document.getElementById('git-commit-opt-all');
     const chkAmend = document.getElementById('git-commit-opt-amend');
+    const filesList = document.getElementById('git-commit-files-list');
+    const stagedBanner = document.getElementById('git-commit-staged-banner');
 
     if (msgInput) msgInput.value = '';
     if (chkAll) chkAll.checked = false;
     if (chkAmend) chkAmend.checked = false;
 
-    this.updateGitCommitPreview();
+    if (filesList) {
+      filesList.innerHTML = '<div class="git-empty-files">Cargando lista de archivos...</div>';
+    }
+    if (stagedBanner) {
+      stagedBanner.classList.add('hidden');
+      stagedBanner.textContent = '';
+    }
+
     if (this.modalGitCommit) {
       this.modalGitCommit.classList.remove('hidden');
     }
     if (msgInput) {
       setTimeout(() => msgInput.focus(), 100);
     }
+
+    this.gitCommitFiles = [];
+    try {
+      const res = await window.api.getGitStatusFiles(termId);
+      if (res && res.isRepo && Array.isArray(res.files)) {
+        this.gitCommitFiles = res.files;
+        this.renderGitCommitFilesList(res.files);
+      } else {
+        if (filesList) filesList.innerHTML = '<div class="git-empty-files">No se pudo consultar el repositorio Git.</div>';
+      }
+    } catch (e) {
+      if (filesList) filesList.innerHTML = '<div class="git-empty-files">Error al consultar archivos Git.</div>';
+    }
+
+    this.updateGitCommitPreview();
+  }
+
+  renderGitCommitFilesList(files) {
+    const filesList = document.getElementById('git-commit-files-list');
+    const stagedBanner = document.getElementById('git-commit-staged-banner');
+    if (!filesList) return;
+
+    filesList.innerHTML = '';
+
+    const stagedFiles = files.filter(f => f.isStaged);
+    const pendingFiles = files.filter(f => f.isUnstaged || f.isUntracked);
+
+    if (stagedBanner) {
+      if (stagedFiles.length > 0) {
+        stagedBanner.classList.remove('hidden');
+        stagedBanner.innerHTML = `<span>ℹ️ <b>${stagedFiles.length}</b> archivo(s) ya preparado(s) (staged) listos para confirmar.</span>`;
+      } else {
+        stagedBanner.classList.add('hidden');
+      }
+    }
+
+    if (pendingFiles.length === 0) {
+      if (stagedFiles.length > 0) {
+        filesList.innerHTML = '<div class="git-empty-files" style="padding:12px; color:var(--tb-git-text, #4ade80);">✓ Todos los cambios modificados ya están preparados (staged) para el commit.</div>';
+      } else {
+        filesList.innerHTML = '<div class="git-empty-files">El árbol de trabajo está limpio. No hay archivos pendientes.</div>';
+      }
+      return;
+    }
+
+    pendingFiles.forEach((file) => {
+      const row = document.createElement('label');
+      row.className = 'git-file-row';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'git-commit-file-chk';
+      chk.value = file.path;
+      // Default: checked if no files were already staged
+      chk.checked = stagedFiles.length === 0;
+      chk.addEventListener('change', () => this.updateGitCommitPreview());
+
+      const badge = document.createElement('span');
+      badge.className = 'git-status-badge';
+      if (file.isUntracked) {
+        badge.classList.add('badge-untracked');
+        badge.textContent = '??';
+      } else if (file.y === 'M') {
+        badge.classList.add('badge-modified');
+        badge.textContent = 'M';
+      } else if (file.y === 'D') {
+        badge.classList.add('badge-deleted');
+        badge.textContent = 'D';
+      } else {
+        badge.classList.add('badge-modified');
+        badge.textContent = file.y || 'M';
+      }
+
+      const pathSpan = document.createElement('span');
+      pathSpan.className = 'git-file-path';
+      pathSpan.textContent = file.path;
+      pathSpan.title = file.path;
+
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'git-file-status-text';
+      statusSpan.textContent = file.unstagedLabel || (file.isUntracked ? 'Sin seguimiento' : 'Modificado');
+
+      row.appendChild(chk);
+      row.appendChild(badge);
+      row.appendChild(pathSpan);
+      row.appendChild(statusSpan);
+      filesList.appendChild(row);
+    });
   }
 
   updateGitCommitPreview() {
@@ -1441,6 +1622,20 @@ class TuxTerminalApp {
     const optAll = chkAll ? chkAll.checked : false;
     const optAmend = chkAmend ? chkAmend.checked : false;
 
+    const checkedBoxes = Array.from(document.querySelectorAll('.git-commit-file-chk:checked'));
+    const totalBoxes = Array.from(document.querySelectorAll('.git-commit-file-chk'));
+    const selectedFilePaths = checkedBoxes.map(c => c.value);
+
+    let prefixCmd = '';
+    if (!optAll && selectedFilePaths.length > 0) {
+      if (totalBoxes.length > 0 && selectedFilePaths.length === totalBoxes.length) {
+        prefixCmd = 'git add -A && ';
+      } else {
+        const quoted = selectedFilePaths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
+        prefixCmd = `git add ${quoted} && `;
+      }
+    }
+
     let cmd = 'git commit';
     if (optAll) cmd += ' -a';
     if (optAmend) cmd += ' --amend';
@@ -1449,7 +1644,7 @@ class TuxTerminalApp {
     cmd += ` -m "${cleanMsg}"`;
 
     if (previewEl) {
-      previewEl.textContent = cmd;
+      previewEl.textContent = `${prefixCmd}${cmd}`;
     }
   }
 
@@ -1470,6 +1665,20 @@ class TuxTerminalApp {
       return;
     }
 
+    const checkedBoxes = Array.from(document.querySelectorAll('.git-commit-file-chk:checked'));
+    const totalBoxes = Array.from(document.querySelectorAll('.git-commit-file-chk'));
+    const selectedFilePaths = checkedBoxes.map(c => c.value);
+
+    let prefixCmd = '';
+    if (!optAll && selectedFilePaths.length > 0) {
+      if (totalBoxes.length > 0 && selectedFilePaths.length === totalBoxes.length) {
+        prefixCmd = 'git add -A && ';
+      } else {
+        const quoted = selectedFilePaths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
+        prefixCmd = `git add ${quoted} && `;
+      }
+    }
+
     let cmd = 'git commit';
     if (optAll) cmd += ' -a';
     if (optAmend) cmd += ' --amend';
@@ -1477,11 +1686,288 @@ class TuxTerminalApp {
       cmd += ` -m "${msg.replace(/"/g, '\\"')}"`;
     }
 
-    window.api.writeTerminal(termId, `${cmd}\r`);
+    const fullCmd = `${prefixCmd}${cmd}`;
+    window.api.writeTerminal(termId, `${fullCmd}\r`);
     if (this.modalGitCommit) {
       this.modalGitCommit.classList.add('hidden');
     }
-    setTimeout(() => this.refreshGitInfo(termId), 500);
+    setTimeout(() => this.refreshGitInfo(termId), 600);
+  }
+
+  // ================= GIT ADD MODAL =================
+  async openGitAddModal(termId) {
+    this.gitAddTargetTermId = termId;
+    const filesList = document.getElementById('git-add-files-list');
+    const chkAll = document.getElementById('git-add-opt-all');
+    const btnSubmit = document.getElementById('btn-git-add-submit');
+
+    if (chkAll) chkAll.checked = false;
+    if (btnSubmit) btnSubmit.disabled = false;
+
+    if (filesList) {
+      filesList.innerHTML = '<div class="git-empty-files">Cargando archivos modificados y sin seguimiento...</div>';
+    }
+
+    if (this.modalGitAdd) {
+      this.modalGitAdd.classList.remove('hidden');
+    }
+
+    this.gitAddFiles = [];
+    try {
+      const res = await window.api.getGitStatusFiles(termId);
+      if (res && res.isRepo && Array.isArray(res.files)) {
+        this.gitAddFiles = res.files.filter(f => f.isUnstaged || f.isUntracked);
+        this.renderGitAddFilesList(this.gitAddFiles);
+      } else {
+        if (filesList) filesList.innerHTML = '<div class="git-empty-files">No se pudo consultar el repositorio Git.</div>';
+        if (btnSubmit) btnSubmit.disabled = true;
+      }
+    } catch (e) {
+      if (filesList) filesList.innerHTML = '<div class="git-empty-files">Error al obtener archivos Git.</div>';
+      if (btnSubmit) btnSubmit.disabled = true;
+    }
+
+    this.updateGitAddPreview();
+  }
+
+  renderGitAddFilesList(files) {
+    const filesList = document.getElementById('git-add-files-list');
+    const btnSubmit = document.getElementById('btn-git-add-submit');
+    if (!filesList) return;
+
+    filesList.innerHTML = '';
+    if (files.length === 0) {
+      filesList.innerHTML = '<div class="git-empty-files">✓ No hay archivos pendientes para agregar (Árbol de trabajo limpio).</div>';
+      if (btnSubmit) btnSubmit.disabled = true;
+      return;
+    }
+
+    if (btnSubmit) btnSubmit.disabled = false;
+
+    files.forEach((file) => {
+      const row = document.createElement('label');
+      row.className = 'git-file-row';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'git-add-file-chk';
+      chk.value = file.path;
+      chk.checked = true;
+      chk.addEventListener('change', () => this.updateGitAddPreview());
+
+      const badge = document.createElement('span');
+      badge.className = 'git-status-badge';
+      if (file.isUntracked) {
+        badge.classList.add('badge-untracked');
+        badge.textContent = '??';
+      } else if (file.y === 'M') {
+        badge.classList.add('badge-modified');
+        badge.textContent = 'M';
+      } else if (file.y === 'D') {
+        badge.classList.add('badge-deleted');
+        badge.textContent = 'D';
+      } else {
+        badge.classList.add('badge-modified');
+        badge.textContent = file.y || 'M';
+      }
+
+      const pathSpan = document.createElement('span');
+      pathSpan.className = 'git-file-path';
+      pathSpan.textContent = file.path;
+      pathSpan.title = file.path;
+
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'git-file-status-text';
+      statusSpan.textContent = file.unstagedLabel || (file.isUntracked ? 'Sin seguimiento' : 'Modificado');
+
+      row.appendChild(chk);
+      row.appendChild(badge);
+      row.appendChild(pathSpan);
+      row.appendChild(statusSpan);
+      filesList.appendChild(row);
+    });
+  }
+
+  updateGitAddPreview() {
+    const chkAll = document.getElementById('git-add-opt-all');
+    const previewEl = document.getElementById('git-add-preview');
+    const btnSubmit = document.getElementById('btn-git-add-submit');
+
+    const optAll = chkAll ? chkAll.checked : false;
+    const checkedBoxes = Array.from(document.querySelectorAll('.git-add-file-chk:checked'));
+    const totalBoxes = Array.from(document.querySelectorAll('.git-add-file-chk'));
+    const selectedPaths = checkedBoxes.map(c => c.value);
+
+    let cmd = '';
+    if (optAll) {
+      cmd = 'git add -A';
+      if (btnSubmit) btnSubmit.disabled = false;
+    } else if (selectedPaths.length === 0) {
+      cmd = '(Selecciona al menos un archivo para agregar)';
+      if (btnSubmit) btnSubmit.disabled = true;
+    } else if (totalBoxes.length > 0 && selectedPaths.length === totalBoxes.length) {
+      cmd = 'git add .';
+      if (btnSubmit) btnSubmit.disabled = false;
+    } else {
+      const quoted = selectedPaths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
+      cmd = `git add ${quoted}`;
+      if (btnSubmit) btnSubmit.disabled = false;
+    }
+
+    if (previewEl) {
+      previewEl.textContent = cmd;
+    }
+  }
+
+  executeGitAdd() {
+    const termId = this.gitAddTargetTermId || this.activeTerminalId;
+    if (!termId) return;
+
+    const previewEl = document.getElementById('git-add-preview');
+    const cmd = previewEl ? previewEl.textContent.trim() : '';
+    if (!cmd || cmd.startsWith('(')) {
+      return;
+    }
+
+    window.api.writeTerminal(termId, `${cmd}\r`);
+    if (this.modalGitAdd) {
+      this.modalGitAdd.classList.add('hidden');
+    }
+    setTimeout(() => this.refreshGitInfo(termId), 600);
+  }
+
+  // ================= GIT UNSTAGE MODAL =================
+  async openGitUnstageModal(termId) {
+    this.gitUnstageTargetTermId = termId;
+    const filesList = document.getElementById('git-unstage-files-list');
+    const chkAll = document.getElementById('git-unstage-opt-all');
+    const btnSubmit = document.getElementById('btn-git-unstage-submit');
+
+    if (chkAll) chkAll.checked = false;
+    if (btnSubmit) btnSubmit.disabled = false;
+
+    if (filesList) {
+      filesList.innerHTML = '<div class="git-empty-files">Cargando archivos preparados (staged)...</div>';
+    }
+
+    if (this.modalGitUnstage) {
+      this.modalGitUnstage.classList.remove('hidden');
+    }
+
+    this.gitUnstageFiles = [];
+    try {
+      const res = await window.api.getGitStatusFiles(termId);
+      if (res && res.isRepo && Array.isArray(res.files)) {
+        this.gitUnstageFiles = res.files.filter(f => f.isStaged);
+        this.renderGitUnstageFilesList(this.gitUnstageFiles);
+      } else {
+        if (filesList) filesList.innerHTML = '<div class="git-empty-files">No se pudo consultar el repositorio Git.</div>';
+        if (btnSubmit) btnSubmit.disabled = true;
+      }
+    } catch (e) {
+      if (filesList) filesList.innerHTML = '<div class="git-empty-files">Error al obtener archivos Git.</div>';
+      if (btnSubmit) btnSubmit.disabled = true;
+    }
+
+    this.updateGitUnstagePreview();
+  }
+
+  renderGitUnstageFilesList(files) {
+    const filesList = document.getElementById('git-unstage-files-list');
+    const btnSubmit = document.getElementById('btn-git-unstage-submit');
+    if (!filesList) return;
+
+    filesList.innerHTML = '';
+    if (files.length === 0) {
+      filesList.innerHTML = '<div class="git-empty-files">✓ No hay archivos en el área de preparación (staged) para quitar.</div>';
+      if (btnSubmit) btnSubmit.disabled = true;
+      return;
+    }
+
+    if (btnSubmit) btnSubmit.disabled = false;
+
+    files.forEach((file) => {
+      const row = document.createElement('label');
+      row.className = 'git-file-row';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'git-unstage-file-chk';
+      chk.value = file.path;
+      chk.checked = true;
+      chk.addEventListener('change', () => this.updateGitUnstagePreview());
+
+      const badge = document.createElement('span');
+      badge.className = 'git-status-badge badge-staged';
+      badge.textContent = file.x || 'STG';
+      if (file.x === 'A') badge.classList.add('badge-added');
+      else if (file.x === 'M') badge.classList.add('badge-modified');
+      else if (file.x === 'D') badge.classList.add('badge-deleted');
+      else if (file.x === 'R') badge.classList.add('badge-renamed');
+
+      const pathSpan = document.createElement('span');
+      pathSpan.className = 'git-file-path';
+      pathSpan.textContent = file.path;
+      pathSpan.title = file.path;
+
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'git-file-status-text';
+      statusSpan.textContent = file.stagedLabel || 'Preparado';
+
+      row.appendChild(chk);
+      row.appendChild(badge);
+      row.appendChild(pathSpan);
+      row.appendChild(statusSpan);
+      filesList.appendChild(row);
+    });
+  }
+
+  updateGitUnstagePreview() {
+    const chkAll = document.getElementById('git-unstage-opt-all');
+    const previewEl = document.getElementById('git-unstage-preview');
+    const btnSubmit = document.getElementById('btn-git-unstage-submit');
+
+    const optAll = chkAll ? chkAll.checked : false;
+    const checkedBoxes = Array.from(document.querySelectorAll('.git-unstage-file-chk:checked'));
+    const totalBoxes = Array.from(document.querySelectorAll('.git-unstage-file-chk'));
+    const selectedPaths = checkedBoxes.map(c => c.value);
+
+    let cmd = '';
+    if (optAll) {
+      cmd = 'git restore --staged .';
+      if (btnSubmit) btnSubmit.disabled = false;
+    } else if (selectedPaths.length === 0) {
+      cmd = '(Selecciona al menos un archivo para quitar)';
+      if (btnSubmit) btnSubmit.disabled = true;
+    } else if (totalBoxes.length > 0 && selectedPaths.length === totalBoxes.length) {
+      cmd = 'git restore --staged .';
+      if (btnSubmit) btnSubmit.disabled = false;
+    } else {
+      const quoted = selectedPaths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
+      cmd = `git restore --staged ${quoted}`;
+      if (btnSubmit) btnSubmit.disabled = false;
+    }
+
+    if (previewEl) {
+      previewEl.textContent = cmd;
+    }
+  }
+
+  executeGitUnstage() {
+    const termId = this.gitUnstageTargetTermId || this.activeTerminalId;
+    if (!termId) return;
+
+    const previewEl = document.getElementById('git-unstage-preview');
+    const cmd = previewEl ? previewEl.textContent.trim() : '';
+    if (!cmd || cmd.startsWith('(')) {
+      return;
+    }
+
+    window.api.writeTerminal(termId, `${cmd}\r`);
+    if (this.modalGitUnstage) {
+      this.modalGitUnstage.classList.add('hidden');
+    }
+    setTimeout(() => this.refreshGitInfo(termId), 600);
   }
 
   // ================= GIT BUTTONS OVERFLOW MENU =================

@@ -275,6 +275,80 @@ function getGitInfoForDir(dir) {
   }
 }
 
+function getGitStatusFiles(dir) {
+  try {
+    if (!dir || !fs.existsSync(dir)) {
+      return { isRepo: false, files: [] };
+    }
+
+    const isInside = execSync('git rev-parse --is-inside-work-tree', {
+      cwd: dir,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      timeout: 1000
+    }).trim();
+
+    if (isInside !== 'true') {
+      return { isRepo: false, files: [] };
+    }
+
+    const output = execSync('git status --porcelain=v1 -u', {
+      cwd: dir,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      timeout: 2000
+    });
+
+    const lines = output.split('\n');
+    const files = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      if (line.length < 4) continue;
+      const x = line[0];
+      const y = line[1];
+      let filePath = line.substring(3).trim();
+      if (filePath.includes(' -> ')) {
+        filePath = filePath.split(' -> ')[1].trim();
+      }
+      if (filePath.startsWith('"') && filePath.endsWith('"')) {
+        filePath = filePath.slice(1, -1);
+      }
+
+      const isUntracked = (x === '?' && y === '?');
+      const isStaged = (x !== ' ' && x !== '?');
+      const isUnstaged = (y !== ' ');
+
+      let stagedLabel = '';
+      if (x === 'M') stagedLabel = 'Modificado';
+      else if (x === 'A') stagedLabel = 'Agregado';
+      else if (x === 'D') stagedLabel = 'Eliminado';
+      else if (x === 'R') stagedLabel = 'Renombrado';
+      else if (x === 'C') stagedLabel = 'Copiado';
+
+      let unstagedLabel = '';
+      if (isUntracked) unstagedLabel = 'Sin seguimiento';
+      else if (y === 'M') unstagedLabel = 'Modificado';
+      else if (y === 'D') unstagedLabel = 'Eliminado';
+
+      files.push({
+        path: filePath,
+        x,
+        y,
+        isUntracked,
+        isStaged,
+        isUnstaged,
+        stagedLabel,
+        unstagedLabel
+      });
+    }
+
+    return { isRepo: true, files };
+  } catch (err) {
+    return { isRepo: false, files: [] };
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -472,6 +546,11 @@ function registerIpcHandlers() {
   ipcMain.handle('git:get-info', (event, { id }) => {
     const cwd = getPtyCwd(id);
     return getGitInfoForDir(cwd);
+  });
+
+  ipcMain.handle('git:get-status-files', (event, { id }) => {
+    const cwd = getPtyCwd(id);
+    return getGitStatusFiles(cwd);
   });
 
   ipcMain.handle('git:set-user', (event, { id, name, email }) => {

@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Git integration
   getGitInfo: (id) => ipcRenderer.invoke('git:get-info', { id }),
+  getGitStatusFiles: (id) => ipcRenderer.invoke('git:get-status-files', { id }),
   setGitUser: (id, name, email) => ipcRenderer.invoke('git:set-user', { id, name, email }),
 
   // SSH Profiles

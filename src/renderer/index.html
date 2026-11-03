@@ -457,7 +457,7 @@
   <!-- Modal: Git Commit Interactivo -->
   <div id="modal-git-commit" class="modal hidden">
     <div class="modal-backdrop"></div>
-    <div class="modal-dialog" style="max-width: 520px;">
+    <div class="modal-dialog" style="width: 580px; max-width: 95vw;">
       <div class="modal-header">
         <div class="modal-title">
           <span class="modal-icon">🌿</span> Confirmar Cambios (Git Commit)
@@ -468,29 +468,141 @@
         <form id="git-commit-form">
           <div class="form-group">
             <label for="git-commit-msg">Mensaje del Commit *</label>
-            <textarea id="git-commit-msg" rows="4" placeholder="Ej. feat: agregar nueva funcionalidad..." style="width:100%; font-family:inherit; font-size:12px; resize:vertical; padding:8px; border-radius:4px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-main);" required></textarea>
+            <textarea id="git-commit-msg" rows="3" placeholder="Ej. feat: agregar nueva funcionalidad..." style="width:100%; font-family:inherit; font-size:12px; resize:vertical; padding:8px; border-radius:4px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-main);" required></textarea>
             <small class="form-hint">Tip: Presiona <kbd style="background:var(--bg-hover); padding:1px 5px; border-radius:3px;">Ctrl + Enter</kbd> para ejecutar el commit directamente.</small>
           </div>
 
-          <div class="form-row" style="gap: 16px; margin: 12px 0;">
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+          <div class="form-group" style="margin-top: 10px;">
+            <div class="git-files-header">
+              <label style="font-weight:600; margin:0;">Archivos para agregar al commit:</label>
+              <div class="git-files-actions">
+                <button type="button" class="git-files-btn-link" id="git-commit-select-all">✓ Seleccionar todos</button>
+                <button type="button" class="git-files-btn-link" id="git-commit-deselect-all">✕ Deseleccionar todos</button>
+              </div>
+            </div>
+            <div id="git-commit-staged-banner" class="git-staged-info-banner hidden"></div>
+            <div id="git-commit-files-list" class="git-files-box">
+              <div class="git-empty-files">Cargando lista de archivos...</div>
+            </div>
+          </div>
+
+          <div class="git-options-group">
+            <label class="git-checkbox-label">
               <input type="checkbox" id="git-commit-opt-all">
-              <span>Incluir todos los archivos modificados (<b>-a</b>)</span>
+              <span>Incluir todos los archivos modificados rastreados (<b>-a</b>)</span>
             </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+            <label class="git-checkbox-label">
               <input type="checkbox" id="git-commit-opt-amend">
               <span>Enmendar último commit (<b>--amend</b>)</span>
             </label>
           </div>
 
           <div class="form-group" style="margin-top: 10px;">
-            <label>Previsualización del comando generado:</label>
-            <pre id="git-commit-preview" style="background:var(--input-bg); border:1px solid var(--border-color); padding:10px 12px; border-radius:4px; font-family:Consolas, monospace; font-size:12px; color:var(--accent-cyan); white-space:pre-wrap; word-break:break-all; margin-top:4px;">git commit -m "..."</pre>
+            <label style="font-weight:600;">Previsualización del comando generado:</label>
+            <pre id="git-commit-preview" class="git-cmd-preview">git commit -m "..."</pre>
           </div>
 
           <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
             <button type="button" class="btn btn-secondary" data-close-modal="modal-git-commit">Cancelar</button>
             <button type="submit" id="btn-git-commit-submit" class="btn btn-primary">Ejecutar Commit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Git Add Interactivo -->
+  <div id="modal-git-add" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" style="width: 580px; max-width: 95vw;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">➕</span> Preparar Archivos (Git Add)
+        </div>
+        <button class="modal-close" data-close-modal="modal-git-add">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-subtitle">
+          Selecciona los archivos modificados o sin seguimiento que deseas agregar al área de preparación:
+        </div>
+        <form id="git-add-form">
+          <div class="form-group">
+            <div class="git-files-header">
+              <label style="font-weight:600; margin:0;">Archivos pendientes:</label>
+              <div class="git-files-actions">
+                <button type="button" class="git-files-btn-link" id="git-add-select-all">✓ Seleccionar todos</button>
+                <button type="button" class="git-files-btn-link" id="git-add-deselect-all">✕ Deseleccionar todos</button>
+              </div>
+            </div>
+            <div id="git-add-files-list" class="git-files-box">
+              <div class="git-empty-files">Cargando archivos...</div>
+            </div>
+          </div>
+
+          <div class="git-options-group">
+            <label class="git-checkbox-label">
+              <input type="checkbox" id="git-add-opt-all">
+              <span>Preparar todos los cambios con comodín (<b>git add -A</b> / <b>git add .</b>)</span>
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label style="font-weight:600;">Previsualización del comando generado:</label>
+            <pre id="git-add-preview" class="git-cmd-preview">git add ...</pre>
+          </div>
+
+          <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn btn-secondary" data-close-modal="modal-git-add">Cancelar</button>
+            <button type="submit" id="btn-git-add-submit" class="btn btn-primary">Ejecutar Git Add</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Git Unstage Interactivo -->
+  <div id="modal-git-unstage" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" style="width: 580px; max-width: 95vw;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">↩</span> Quitar de Preparación (Git Unstage)
+        </div>
+        <button class="modal-close" data-close-modal="modal-git-unstage">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-subtitle">
+          Selecciona los archivos preparados que deseas quitar del área de preparación (staged):
+        </div>
+        <form id="git-unstage-form">
+          <div class="form-group">
+            <div class="git-files-header">
+              <label style="font-weight:600; margin:0;">Archivos preparados (Staged):</label>
+              <div class="git-files-actions">
+                <button type="button" class="git-files-btn-link" id="git-unstage-select-all">✓ Seleccionar todos</button>
+                <button type="button" class="git-files-btn-link" id="git-unstage-deselect-all">✕ Deseleccionar todos</button>
+              </div>
+            </div>
+            <div id="git-unstage-files-list" class="git-files-box">
+              <div class="git-empty-files">Cargando archivos...</div>
+            </div>
+          </div>
+
+          <div class="git-options-group">
+            <label class="git-checkbox-label">
+              <input type="checkbox" id="git-unstage-opt-all">
+              <span>Quitar todos los archivos preparados (<b>git restore --staged .</b>)</span>
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label style="font-weight:600;">Previsualización del comando generado:</label>
+            <pre id="git-unstage-preview" class="git-cmd-preview">git restore --staged ...</pre>
+          </div>
+
+          <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn btn-secondary" data-close-modal="modal-git-unstage">Cancelar</button>
+            <button type="submit" id="btn-git-unstage-submit" class="btn btn-primary">Ejecutar Git Unstage</button>
           </div>
         </form>
       </div>
