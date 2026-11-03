@@ -721,6 +721,16 @@ body, html {
   justify-content: center;
 }
 
+#modal-edit-git-action {
+  z-index: 1200 !important;
+}
+
+.split-icon {
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .modal.hidden {
   display: none;
 }

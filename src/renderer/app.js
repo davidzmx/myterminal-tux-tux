@@ -89,6 +89,9 @@ class TuxTerminalApp {
   async loadInitialData() {
     try {
       this.config = await window.api.getConfig();
+      if (this.config && this.config.gitActions) {
+        this.config.gitActions = this.config.gitActions.filter(a => a.action !== 'user-git' && a.label !== 'user Git');
+      }
     } catch (e) {
       console.error('Error loading config:', e);
       this.config = { theme: 'dark', defaultDir: 'cwd', gitActions: [] };
@@ -577,8 +580,7 @@ class TuxTerminalApp {
       { id: 'pull', label: 'Pull', cmd: 'git pull', enabled: true },
       { id: 'fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
       { id: 'diff', label: 'Diff', cmd: 'git diff', enabled: true },
-      { id: 'log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
-      { id: 'act-user', label: 'user Git', action: 'user-git', enabled: true }
+      { id: 'log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true }
     ];
     this.config.gitActions = defaults;
     await window.api.saveConfig(this.config);
@@ -915,7 +917,7 @@ class TuxTerminalApp {
     // Split V
     const btnSplitV = document.createElement('button');
     btnSplitV.className = 'term-tool-btn';
-    btnSplitV.innerHTML = '⬌ V';
+    btnSplitV.innerHTML = '<svg class="split-icon" width="13" height="13" viewBox="0 0 16 16"><rect x="2" y="1" width="4.5" height="14" rx="1"/><rect x="9.5" y="1" width="4.5" height="14" rx="1"/></svg>';
     btnSplitV.title = 'Dividir Verticalmente (Ctrl+Shift+E)';
     btnSplitV.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -925,7 +927,7 @@ class TuxTerminalApp {
     // Split H
     const btnSplitH = document.createElement('button');
     btnSplitH.className = 'term-tool-btn';
-    btnSplitH.innerHTML = '⬍ H';
+    btnSplitH.innerHTML = '<svg class="split-icon" width="13" height="13" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="4.5" rx="1"/><rect x="1" y="9.5" width="14" height="4.5" rx="1"/></svg>';
     btnSplitH.title = 'Dividir Horizontalmente (Ctrl+Shift+O)';
     btnSplitH.addEventListener('click', (e) => {
       e.stopPropagation();

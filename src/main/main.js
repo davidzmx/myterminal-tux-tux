@@ -163,8 +163,7 @@ function getDefaultConfig() {
       { id: 'act-pull', label: 'Pull', cmd: 'git pull', enabled: true },
       { id: 'act-fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
       { id: 'act-diff', label: 'Diff', cmd: 'git diff', enabled: true },
-      { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true },
-      { id: 'act-user', label: 'user Git', action: 'user-git', enabled: true }
+      { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true }
     ]
   };
 }
