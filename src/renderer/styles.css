@@ -179,6 +179,41 @@ body, html {
   font-weight: 500;
 }
 
+/* Tab connected to SSH */
+.tab-item.tab-ssh {
+  background: linear-gradient(180deg, rgba(30, 58, 138, 0.25) 0%, rgba(30, 58, 138, 0.5) 100%);
+  color: #bfdbfe;
+  border-bottom: 2px solid #3b82f6;
+  border-top: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.tab-item.tab-ssh:hover {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.35) 0%, rgba(30, 58, 138, 0.65) 100%);
+  color: #ffffff;
+}
+
+.tab-item.tab-ssh.active {
+  background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+  color: #ffffff;
+  border-bottom: 2px solid #60a5fa;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+body.theme-light .tab-item.tab-ssh {
+  background: #dbeafe;
+  color: #1e40af;
+  border-bottom: 2px solid #3b82f6;
+  border-top: 1px solid rgba(37, 99, 235, 0.3);
+}
+
+body.theme-light .tab-item.tab-ssh.active {
+  background: #bfdbfe;
+  color: #1e3a8a;
+  border-bottom: 2px solid #1d4ed8;
+  font-weight: 600;
+}
+
 .tab-title {
   font-size: 12px;
 }
@@ -387,54 +422,126 @@ body, html {
   border-color: #4b5563;
 }
 
+.tb-shell-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background-color: #f1f3f5;
+  color: #4b5563;
+  border-color: #cbd5e1;
+}
+
+body.theme-dark .tb-shell-select:disabled {
+  background-color: #232634;
+  color: #94a3b8;
+  border-color: #3b3f54;
+}
+
 /* SSH Connection Active Badge */
 .tb-ssh-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background-color: #dbeafe;
+  gap: 7px;
+  background-color: #1e3a8a;
   border: 1px solid #3b82f6;
-  color: #1e40af;
+  color: #ffffff;
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 500;
   height: 24px;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
-body.theme-dark .tb-ssh-badge {
-  background-color: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.5);
-  color: #93c5fd;
+.ssh-key-icon {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .ssh-badge-name {
-  font-weight: bold;
+  font-weight: 700;
+  color: #ffffff !important;
+  letter-spacing: 0.2px;
 }
 
 .ssh-badge-host {
-  font-family: monospace;
-  opacity: 0.9;
-  font-size: 10px;
+  font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  color: #93c5fd !important;
+  background-color: rgba(0, 0, 0, 0.35);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 11px;
 }
 
-.ssh-disconnect-btn {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: var(--accent-red);
+body.theme-light .tb-ssh-badge {
+  background-color: #1d4ed8;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+body.theme-light .ssh-badge-name {
+  color: #ffffff !important;
+}
+
+body.theme-light .ssh-badge-host {
+  color: #dbeafe !important;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.ssh-toggle-git-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 10px;
   cursor: pointer;
-  margin-left: 4px;
+  margin-left: 2px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+}
+
+.ssh-toggle-git-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ssh-toggle-git-btn.active {
+  background: #16a34a;
+  border-color: #22c55e;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.ssh-disconnect-btn {
+  background: #dc2626;
+  border: 1px solid #b91c1c;
+  color: #ffffff;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  margin-left: 3px;
   font-weight: bold;
   transition: all 0.15s;
 }
 
 .ssh-disconnect-btn:hover {
-  background: var(--accent-red);
-  color: #ffffff;
+  background: #ef4444;
+}
+
+/* Terminal pane header when connected to SSH */
+.terminal-header.header-ssh {
+  border-bottom: 2px solid #3b82f6;
+  background-color: #e0e7ff;
+}
+
+body.theme-dark .terminal-header.header-ssh {
+  border-bottom: 2px solid #3b82f6;
+  background-color: #1a1e2e;
 }
 
 /* Git Branch Pill Button */

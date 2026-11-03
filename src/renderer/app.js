@@ -648,6 +648,7 @@ class TuxTerminalApp {
     this.renderTabsNav();
     this.switchTab(tabId);
     this.renderTabWorkspace(tabId);
+    this.setActiveTerminal(newTermId);
 
     return tab;
   }
@@ -665,6 +666,12 @@ class TuxTerminalApp {
     document.querySelectorAll('.tab-view').forEach((el) => {
       el.classList.toggle('active', el.id === `view-${tabId}`);
     });
+
+    const leaves = this.getLeafTerminals(tab.tree);
+    const targetTerm = leaves.find((l) => l.id === this.activeTerminalId) || leaves[0];
+    if (targetTerm) {
+      this.setActiveTerminal(targetTerm.id);
+    }
 
     this.updateStatusBar();
     this.fitAllTerminals();
@@ -692,23 +699,34 @@ class TuxTerminalApp {
     this.switchTab(nextTab.id);
   }
 
+  isTabInSsh(tabId) {
+    const tab = this.tabs.find((t) => t.id === tabId);
+    if (!tab) return false;
+    const leaves = this.getLeafTerminals(tab.tree);
+    return leaves.some((leaf) => {
+      const inst = this.terminals.get(leaf.id);
+      return Boolean(inst && inst.sshSession);
+    });
+  }
+
   renderTabsNav() {
     this.tabsListEl.innerHTML = '';
     this.tabs.forEach((tab) => {
+      const inSsh = this.isTabInSsh(tab.id);
       const tabEl = document.createElement('div');
-      tabEl.className = `tab-item ${tab.id === this.activeTabId ? 'active' : ''}`;
+      tabEl.className = `tab-item ${tab.id === this.activeTabId ? 'active' : ''} ${inSsh ? 'tab-ssh' : ''}`;
       tabEl.setAttribute('data-tab-id', tab.id);
 
       const titleEl = document.createElement('span');
       titleEl.className = 'tab-title';
-      titleEl.textContent = tab.title;
+      titleEl.textContent = (inSsh ? '🔑 ' : '') + tab.title;
 
       titleEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         const newName = prompt('Renombrar pestaña:', tab.title);
         if (newName && newName.trim()) {
           tab.title = newName.trim();
-          titleEl.textContent = tab.title;
+          titleEl.textContent = (this.isTabInSsh(tab.id) ? '🔑 ' : '') + tab.title;
           this.updateStatusBar();
         }
       });
@@ -858,11 +876,17 @@ class TuxTerminalApp {
     sshBadge.className = 'tb-ssh-badge hidden';
     sshBadge.id = `ssh-badge-${node.id}`;
     sshBadge.innerHTML = `
-      <span>🔑</span>
+      <span class="ssh-key-icon">🔑</span>
       <span class="ssh-badge-name" id="ssh-badge-name-${node.id}"></span>
       <span class="ssh-badge-host" id="ssh-badge-host-${node.id}"></span>
+      <button type="button" class="ssh-toggle-git-btn" id="ssh-toggle-git-${node.id}" title="Mostrar u ocultar botones de Git en el servidor remoto">🌿 Git</button>
       <button type="button" class="ssh-disconnect-btn" id="ssh-disconnect-${node.id}" title="Desconectar y volver a local">✕ Salir</button>
     `;
+
+    sshBadge.querySelector('.ssh-toggle-git-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleSshGitActions(node.id);
+    });
 
     sshBadge.querySelector('.ssh-disconnect-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1107,13 +1131,23 @@ class TuxTerminalApp {
   }
 
   // ================= SSH & GIT TOOLBAR STATUS =================
+  toggleSshGitActions(termId) {
+    const inst = this.terminals.get(termId);
+    if (!inst) return;
+    inst.sshShowGit = !inst.sshShowGit;
+    this.updateToolbarSshStatus(termId);
+  }
+
   updateToolbarSshStatus(termId) {
     const inst = this.terminals.get(termId);
     const sshBadge = document.getElementById(`ssh-badge-${termId}`);
+    const shellSelect = document.getElementById(`shell-select-${termId}`);
     const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
     const userBtn = document.getElementById(`git-user-btn-${termId}`);
     const gitActions = document.getElementById(`git-actions-${termId}`);
     const nonGitBadge = document.getElementById(`non-git-${termId}`);
+    const toggleGitBtn = document.getElementById(`ssh-toggle-git-${termId}`);
+    const headerEl = document.getElementById(`header-${termId}`);
 
     if (!sshBadge) return;
 
@@ -1126,15 +1160,46 @@ class TuxTerminalApp {
       if (hostEl) hostEl.textContent = `(${sess.username}@${sess.host}${portStr})`;
 
       sshBadge.classList.remove('hidden');
+      if (headerEl) headerEl.classList.add('header-ssh');
 
+      // Lock local shell select while in remote SSH
+      if (shellSelect) {
+        shellSelect.disabled = true;
+        shellSelect.title = 'Terminal remota SSH (no se puede cambiar el shell local durante la conexión)';
+      }
+
+      // In remote SSH, hide local git branch and user config
       if (branchWrapper) branchWrapper.classList.add('hidden');
       if (userBtn) userBtn.classList.add('hidden');
-      if (gitActions) gitActions.classList.add('hidden');
       if (nonGitBadge) nonGitBadge.classList.add('hidden');
+
+      // Toggleable Git actions buttons
+      if (gitActions) {
+        if (inst.sshShowGit) {
+          gitActions.classList.remove('hidden');
+        } else {
+          gitActions.classList.add('hidden');
+        }
+      }
+
+      if (toggleGitBtn) {
+        toggleGitBtn.classList.toggle('active', Boolean(inst.sshShowGit));
+        toggleGitBtn.textContent = inst.sshShowGit ? '🌿 Git ✓' : '🌿 Git';
+        toggleGitBtn.title = inst.sshShowGit ? 'Ocultar botones de Git' : 'Mostrar botones de acciones Git en el servidor remoto';
+      }
     } else {
       sshBadge.classList.add('hidden');
+      if (headerEl) headerEl.classList.remove('header-ssh');
+
+      if (shellSelect) {
+        shellSelect.disabled = false;
+        shellSelect.title = 'Cambiar tipo de terminal local';
+      }
+
       this.refreshGitInfo(termId);
     }
+
+    this.renderTabsNav();
     this.updateStatusBar();
   }
 
@@ -1143,6 +1208,7 @@ class TuxTerminalApp {
     const inst = this.terminals.get(termId);
     if (inst) {
       inst.sshSession = null;
+      inst.sshShowGit = false;
       inst.title = 'Terminal';
     }
     this.updateToolbarSshStatus(termId);
@@ -1322,6 +1388,7 @@ class TuxTerminalApp {
         if (curInst && curInst.sshSession) {
           if (/(Connection to [^\r\n]+ closed|Cerrada la conexi[oó]n a|Connection closed by|logout\r?\n|Killed by signal)/i.test(data)) {
             curInst.sshSession = null;
+            curInst.sshShowGit = false;
             curInst.title = 'Terminal';
             this.updateToolbarSshStatus(node.id);
           }
@@ -1342,6 +1409,7 @@ class TuxTerminalApp {
         title: node.title || 'Terminal',
         gitInfo: null,
         sshSession: null,
+        sshShowGit: false,
         sshPwdListener: null
       };
 
@@ -1352,13 +1420,16 @@ class TuxTerminalApp {
         shellSelect.value = ptyResult.shellPath;
       }
 
-      if (!this.activeTerminalId) {
+      if (!this.activeTerminalId || this.activeTerminalId === node.id) {
         this.setActiveTerminal(node.id);
       }
 
       setTimeout(() => {
         if (fitAddon) fitAddon.fit();
         this.refreshGitInfo(node.id);
+        if (this.activeTerminalId === node.id) {
+          term.focus();
+        }
       }, 80);
     } catch (err) {
       console.error('Failed to create terminal backend:', err);
@@ -1376,6 +1447,11 @@ class TuxTerminalApp {
     const termObj = this.terminals.get(termId);
     if (termObj && termObj.term) {
       termObj.term.focus();
+      setTimeout(() => {
+        if (this.activeTerminalId === termId && termObj.term) {
+          termObj.term.focus();
+        }
+      }, 60);
     }
 
     this.updateStatusBar();
@@ -1425,6 +1501,7 @@ class TuxTerminalApp {
     };
 
     tab.tree = replaceInTree(tab.tree);
+    this.activeTerminalId = newTermId;
     this.renderTabWorkspace(this.activeTabId);
     this.setActiveTerminal(newTermId);
   }
@@ -1603,6 +1680,7 @@ class TuxTerminalApp {
     const inst = this.terminals.get(termId);
     if (inst) {
       inst.sshSession = profile;
+      inst.sshShowGit = false;
       inst.title = `SSH: ${profile.name} (${profile.host})`;
     }
     this.updateToolbarSshStatus(termId);
