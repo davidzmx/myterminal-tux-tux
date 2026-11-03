@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyTerminal Tux Tux</title>
-  <!-- xterm CSS from node_modules or bundled -->
   <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -47,7 +46,7 @@
         <span id="active-term-info">Terminal activa: Ninguna</span>
       </div>
       <div class="shortcuts-hint">
-        <span>Click derecho en terminal: <b>Menú Dividir/SSH</b></span>
+        <span>Click derecho en terminal: <b>Menú Dividir / SSH</b> • Ctrl+Shift+O (H) • Ctrl+Shift+E (V)</span>
       </div>
     </footer>
   </div>
@@ -81,6 +80,36 @@
     </div>
   </div>
 
+  <!-- Modal: Git User Config -->
+  <div id="modal-git-user" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">👤</span> Configuración de Usuario Git
+        </div>
+        <button class="modal-close" data-close-modal="modal-git-user">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Configura el nombre y correo para los commits en este repositorio local.</p>
+        <form id="git-user-form">
+          <div class="form-group">
+            <label for="git-user-name">Nombre de Usuario (user.name)</label>
+            <input type="text" id="git-user-name" placeholder="Ej. David">
+          </div>
+          <div class="form-group">
+            <label for="git-user-email">Correo Electrónico (user.email)</label>
+            <input type="text" id="git-user-email" placeholder="david@ejemplo.com">
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" data-close-modal="modal-git-user">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Guardar en Repositorio</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: SSH Profiles Manager -->
   <div id="modal-ssh" class="modal hidden">
     <div class="modal-backdrop"></div>
@@ -92,7 +121,6 @@
         <button class="modal-close" data-close-modal="modal-ssh">&times;</button>
       </div>
       <div class="modal-body ssh-manager-layout">
-        <!-- Sidebar with Profiles List -->
         <div class="ssh-sidebar">
           <div class="ssh-list-header">
             <span>Perfiles Guardados</span>
@@ -101,7 +129,6 @@
           <div id="ssh-profiles-list" class="profiles-list"></div>
         </div>
 
-        <!-- Form for editing / creating profile -->
         <div class="ssh-form-container">
           <h3 id="ssh-form-title">Editar Perfil</h3>
           <form id="ssh-profile-form">

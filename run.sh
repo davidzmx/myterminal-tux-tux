@@ -5,3 +5,4 @@ cd "$DIR"
 
 echo "🐧 Iniciando MyTerminal Tux Tux..."
 npx electron . "$@"
+

@@ -23,8 +23,18 @@
   --accent-green: #10b981;
 
   --topbar-height: 40px;
-  --term-header-height: 32px;
+  --term-header-height: 34px;
   --statusbar-height: 24px;
+
+  /* Terminal Toolbar Colors (matching user reference) */
+  --tb-bg: #e6e8ec;
+  --tb-border: #cfd3da;
+  --tb-text: #212529;
+  --tb-btn-hover: #d2d6dc;
+  --tb-link-blue: #2563eb;
+  --tb-git-bg: #e8f5e9;
+  --tb-git-border: #4caf50;
+  --tb-git-text: #1b5e20;
 }
 
 * {
@@ -287,59 +297,214 @@ body, html {
   border-color: var(--accent-cyan);
 }
 
-.terminal-pane.active-pane .terminal-header {
-  background-color: #1e202b;
-  border-bottom-color: var(--accent-cyan);
-}
-
+/* ================= TERMINAL TOOLBAR (MATCHING USER IMAGES) ================= */
 .terminal-header {
   height: var(--term-header-height);
-  background-color: var(--bg-darker);
-  border-bottom: 1px solid var(--border-color);
+  background-color: var(--tb-bg);
+  border-bottom: 1px solid var(--tb-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  padding: 0 6px;
   flex-shrink: 0;
+  color: var(--tb-text);
+  font-size: 12px;
+  z-index: 20;
 }
 
-.terminal-title-area {
+.tb-left-group {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
 }
 
-.terminal-badge {
-  background-color: var(--bg-active);
-  color: var(--accent-cyan);
-  padding: 2px 6px;
+.tb-left-group::-webkit-scrollbar {
+  display: none;
+}
+
+.tb-label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 12px;
+  margin-right: 2px;
+}
+
+/* Shell Selector */
+.tb-shell-select {
+  background-color: #ffffff;
+  border: 1px solid #9ca3af;
   border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
+  color: #111827;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  height: 24px;
 }
 
-.terminal-title-text {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tb-shell-select:hover {
+  border-color: #4b5563;
 }
 
-.terminal-tools {
+/* Blue Link Button */
+.tb-link-btn {
+  background-color: var(--tb-link-blue);
+  color: #ffffff;
+  border: 1px solid #1d4ed8;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.tb-link-btn:hover {
+  background-color: #1d4ed8;
+}
+
+/* Git Branch Pill Button */
+.tb-git-branch-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tb-git-branch-btn {
+  background-color: var(--tb-git-bg);
+  border: 1px solid var(--tb-git-border);
+  color: var(--tb-git-text);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: bold;
   display: flex;
   align-items: center;
   gap: 4px;
+  cursor: pointer;
+  height: 24px;
+  white-space: nowrap;
+}
+
+.tb-git-branch-btn:hover {
+  background-color: #d1ebd5;
+}
+
+.tb-git-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  min-width: 150px;
+  z-index: 500;
+  display: none;
+  padding: 3px 0;
+}
+
+.tb-git-dropdown.show {
+  display: block;
+}
+
+.tb-git-dropdown-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #1e293b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tb-git-dropdown-item:hover, .tb-git-dropdown-item.active {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.tb-git-dropdown-item.new-branch {
+  border-top: 1px solid #e2e8f0;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.tb-git-dropdown-item.new-branch:hover {
+  background-color: #f1f5f9;
+  color: #2563eb;
+}
+
+/* Git User Pill */
+.tb-git-user-btn {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.tb-git-user-btn:hover {
+  background-color: var(--tb-btn-hover);
+}
+
+/* Git Action Buttons */
+.tb-git-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tb-git-action-btn {
+  background: transparent;
+  border: none;
+  color: #374151;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+
+.tb-git-action-btn:hover {
+  background-color: var(--tb-btn-hover);
+  color: #111827;
+}
+
+/* Non-Git fallback badge */
+.tb-non-git-badge {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+  padding: 2px 4px;
+}
+
+/* Right tools */
+.tb-right-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
 }
 
 .term-tool-btn {
-  background: var(--bg-dark);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
+  background: #ffffff;
+  border: 1px solid #9ca3af;
+  color: #374151;
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 11px;
@@ -347,17 +512,18 @@ body, html {
   display: flex;
   align-items: center;
   gap: 3px;
+  height: 24px;
   transition: all 0.1s;
 }
 
 .term-tool-btn:hover {
-  background: var(--bg-hover);
-  color: #fff;
-  border-color: var(--text-dim);
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #6b7280;
 }
 
 .term-tool-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.15);
   color: var(--accent-red);
   border-color: var(--accent-red);
 }
@@ -369,9 +535,9 @@ body, html {
 }
 
 .ssh-select-btn {
-  background: rgba(0, 173, 181, 0.12);
-  border: 1px solid rgba(0, 173, 181, 0.3);
-  color: var(--accent-cyan);
+  background: #ffffff;
+  border: 1px solid #9ca3af;
+  color: #1d4ed8;
   padding: 2px 7px;
   border-radius: 3px;
   font-size: 11px;
@@ -379,18 +545,20 @@ body, html {
   display: flex;
   align-items: center;
   gap: 3px;
+  height: 24px;
+  font-weight: 500;
 }
 
 .ssh-select-btn:hover {
-  background: rgba(0, 173, 181, 0.25);
-  border-color: var(--accent-cyan);
+  background: #eff6ff;
+  border-color: #2563eb;
 }
 
 .ssh-dropdown-menu {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 3px;
+  margin-top: 2px;
   background-color: var(--bg-panel);
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -438,6 +606,7 @@ body, html {
   position: relative;
   padding: 4px;
   overflow: hidden;
+  background-color: #0c0d12;
 }
 
 .xterm {

@@ -17,9 +17,11 @@ class TuxTerminalApp {
     this.tabs = [];
     this.activeTabId = null;
     this.activeTerminalId = null;
-    this.terminals = new Map(); // id -> { term, fitAddon, ptyId, container, headerEl, title }
+    this.terminals = new Map(); // id -> { term, fitAddon, ptyId, shellPath, gitInfo, ... }
     this.profiles = [];
+    this.availableShells = [];
     this.contextTargetTermId = null;
+    this.gitTargetTermId = null;
 
     this.initElements();
     this.bindGlobalEvents();
@@ -39,6 +41,7 @@ class TuxTerminalApp {
     this.modalSsh = document.getElementById('modal-ssh');
     this.modalSession = document.getElementById('modal-session');
     this.modalTabLayout = document.getElementById('modal-tab-layout');
+    this.modalGitUser = document.getElementById('modal-git-user');
 
     // SSH Form elements
     this.sshForm = document.getElementById('ssh-profile-form');
@@ -47,10 +50,19 @@ class TuxTerminalApp {
     this.sshKeyGroup = document.getElementById('group-ssh-key');
     this.btnSshDelete = document.getElementById('btn-ssh-delete');
     this.btnSshConnectActive = document.getElementById('btn-ssh-connect-active');
+
+    // Git Form
+    this.gitUserForm = document.getElementById('git-user-form');
   }
 
   async loadInitialData() {
-    // Load SSH profiles
+    try {
+      this.availableShells = await window.api.getAvailableShells();
+    } catch (e) {
+      console.error('Error fetching shells:', e);
+      this.availableShells = [{ name: 'Bash', path: '/bin/bash' }];
+    }
+
     try {
       this.profiles = await window.api.getProfiles();
       this.renderSshProfilesList();
@@ -62,7 +74,11 @@ class TuxTerminalApp {
     // Create first default tab
     this.createTab('Principal');
 
-    // Listen to window resizing to auto-fit all active xterm instances
+    // Polling git info every 2.5s for terminals
+    setInterval(() => {
+      this.updateAllGitInfo();
+    }, 2500);
+
     window.addEventListener('resize', () => {
       this.fitAllTerminals();
     });
@@ -144,14 +160,30 @@ class TuxTerminalApp {
       this.handleSaveTabTemplate();
     });
 
-    // Hide context menu on global click
+    // Git user form submit
+    this.gitUserForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const termId = this.gitTargetTermId || this.activeTerminalId;
+      if (!termId) return;
+
+      const name = document.getElementById('git-user-name').value.trim();
+      const email = document.getElementById('git-user-email').value.trim();
+
+      await window.api.setGitUser(termId, name, email);
+      this.modalGitUser.classList.add('hidden');
+      this.refreshGitInfo(termId);
+    });
+
+    // Hide dropdowns and context menu on global click
     document.addEventListener('click', (e) => {
       if (!this.contextMenu.contains(e.target)) {
         this.hideContextMenu();
       }
-      // Hide open SSH dropdowns
       if (!e.target.closest('.ssh-select-wrapper')) {
         document.querySelectorAll('.ssh-dropdown-menu.show').forEach((m) => m.classList.remove('show'));
+      }
+      if (!e.target.closest('.tb-git-branch-wrapper')) {
+        document.querySelectorAll('.tb-git-dropdown.show').forEach((m) => m.classList.remove('show'));
       }
     });
 
@@ -188,18 +220,16 @@ class TuxTerminalApp {
       }
     });
 
-    // Keyboard Shortcuts
+    // Keyboard Shortcuts (Terminator style)
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.shiftKey) {
         if (e.key === 'T' || e.key === 't') {
           e.preventDefault();
           this.createTab(`Pestaña ${this.tabs.length + 1}`);
         } else if (e.key === 'O' || e.key === 'o') {
-          // Terminator standard: Ctrl+Shift+O = Split Horizontal
           e.preventDefault();
           if (this.activeTerminalId) this.splitTerminal(this.activeTerminalId, 'horizontal');
         } else if (e.key === 'E' || e.key === 'e') {
-          // Terminator standard: Ctrl+Shift+E = Split Vertical
           e.preventDefault();
           if (this.activeTerminalId) this.splitTerminal(this.activeTerminalId, 'vertical');
         } else if (e.key === 'W' || e.key === 'w') {
@@ -214,7 +244,6 @@ class TuxTerminalApp {
   createTab(title = 'Pestaña', layoutTree = null) {
     const tabId = 'tab_' + Math.random().toString(36).substring(2, 9);
     
-    // Default initial tree is a single terminal
     const initialTree = layoutTree || {
       id: 'term_' + Math.random().toString(36).substring(2, 9),
       type: 'terminal',
@@ -224,13 +253,11 @@ class TuxTerminalApp {
     const tab = {
       id: tabId,
       title: title,
-      tree: initialTree,
-      terminalsCount: 0
+      tree: initialTree
     };
 
     this.tabs.push(tab);
 
-    // Create DOM view container for this tab
     const tabView = document.createElement('div');
     tabView.id = `view-${tabId}`;
     tabView.className = 'tab-view';
@@ -249,12 +276,10 @@ class TuxTerminalApp {
 
     this.activeTabId = tabId;
 
-    // Update Tab UI classes
     document.querySelectorAll('.tab-item').forEach((el) => {
       el.classList.toggle('active', el.getAttribute('data-tab-id') === tabId);
     });
 
-    // Update Tab Views
     document.querySelectorAll('.tab-view').forEach((el) => {
       el.classList.toggle('active', el.id === `view-${tabId}`);
     });
@@ -272,17 +297,14 @@ class TuxTerminalApp {
     const tabIndex = this.tabs.findIndex((t) => t.id === tabId);
     if (tabIndex === -1) return;
 
-    // Cleanup all terminals inside this tab
     const tab = this.tabs[tabIndex];
     this.destroySubtreeTerminals(tab.tree);
 
-    // Remove DOM view
     const viewEl = document.getElementById(`view-${tabId}`);
     if (viewEl) viewEl.remove();
 
     this.tabs.splice(tabIndex, 1);
 
-    // Switch to another tab
     const nextTab = this.tabs[Math.max(0, tabIndex - 1)];
     this.renderTabsNav();
     this.switchTab(nextTab.id);
@@ -299,7 +321,6 @@ class TuxTerminalApp {
       titleEl.className = 'tab-title';
       titleEl.textContent = tab.title;
 
-      // Double click to rename tab
       titleEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         const newName = prompt('Renombrar pestaña:', tab.title);
@@ -340,7 +361,6 @@ class TuxTerminalApp {
     const domNode = this.buildSplitDom(tab.tree, tabId);
     viewEl.appendChild(domNode);
 
-    // After DOM inserted, instantiate terminals that need rendering
     this.initUnmountedTerminals(tab.tree);
     this.fitAllTerminals();
   }
@@ -350,24 +370,20 @@ class TuxTerminalApp {
       return this.createTerminalPaneDom(node, tabId);
     }
 
-    // Split container
     const container = document.createElement('div');
     container.className = `split-box ${node.orientation}`;
     container.setAttribute('data-node-id', node.id);
 
-    // First child
     const firstWrapper = document.createElement('div');
     firstWrapper.className = 'split-child first-child';
     const firstRatio = (node.ratio || 0.5) * 100;
     firstWrapper.style.flex = `0 0 calc(${firstRatio}% - 2px)`;
     firstWrapper.appendChild(this.buildSplitDom(node.first, tabId));
 
-    // Splitter
     const splitter = document.createElement('div');
     splitter.className = 'splitter';
     this.bindSplitterDrag(splitter, node, firstWrapper, container);
 
-    // Second child
     const secondWrapper = document.createElement('div');
     secondWrapper.className = 'split-child second-child';
     secondWrapper.style.flex = '1 1 0%';
@@ -383,7 +399,7 @@ class TuxTerminalApp {
   bindSplitterDrag(splitterEl, splitNode, firstWrapper, containerEl) {
     let isDragging = false;
 
-    const onPointerDown = (e) => {
+    const onPointerDown = () => {
       isDragging = true;
       splitterEl.classList.add('dragging');
       document.body.style.cursor = splitNode.orientation === 'vertical' ? 'col-resize' : 'row-resize';
@@ -404,7 +420,6 @@ class TuxTerminalApp {
         ratio = offset / rect.height;
       }
 
-      // Constrain ratio between 10% and 90%
       ratio = Math.max(0.1, Math.min(0.9, ratio));
       splitNode.ratio = ratio;
       firstWrapper.style.flex = `0 0 calc(${ratio * 100}% - 2px)`;
@@ -426,38 +441,144 @@ class TuxTerminalApp {
     splitterEl.addEventListener('pointerdown', onPointerDown);
   }
 
+  // ================= TERMINAL TOOLBAR (MATCHING USER IMAGES) =================
   createTerminalPaneDom(node, tabId) {
     const pane = document.createElement('div');
     pane.className = `terminal-pane ${this.activeTerminalId === node.id ? 'active-pane' : ''}`;
     pane.id = `pane-${node.id}`;
     pane.setAttribute('data-term-id', node.id);
 
-    // Terminal Header / Toolbar
+    // Terminal Toolbar Header (Light gray styled as in user's image)
     const header = document.createElement('div');
     header.className = 'terminal-header';
+    header.id = `header-${node.id}`;
 
-    // Left info
-    const titleArea = document.createElement('div');
-    titleArea.className = 'terminal-title-area';
-    
-    const badge = document.createElement('span');
-    badge.className = 'terminal-badge';
-    badge.textContent = 'LOCAL';
-    badge.id = `badge-${node.id}`;
+    // Left toolbar group
+    const leftGroup = document.createElement('div');
+    leftGroup.className = 'tb-left-group';
 
-    const titleText = document.createElement('span');
-    titleText.className = 'terminal-title-text';
-    titleText.textContent = node.title || 'Terminal';
-    titleText.id = `title-${node.id}`;
+    // 1. "Terminal" label
+    const termLabel = document.createElement('span');
+    termLabel.className = 'tb-label';
+    termLabel.textContent = 'Terminal';
 
-    titleArea.appendChild(badge);
-    titleArea.appendChild(titleText);
+    // 2. Shell dropdown select (Bash, Dash, PowerShell, etc.)
+    const shellSelect = document.createElement('select');
+    shellSelect.className = 'tb-shell-select';
+    shellSelect.id = `shell-select-${node.id}`;
+    this.populateShellSelect(shellSelect, node.id);
 
-    // Right toolbar buttons
-    const tools = document.createElement('div');
-    tools.className = 'terminal-tools';
+    shellSelect.addEventListener('change', async (e) => {
+      const chosenPath = e.target.value;
+      await this.handleSwitchShell(node.id, chosenPath);
+    });
 
-    // Split Vertical button
+    // 3. Blue Link Button
+    const linkBtn = document.createElement('button');
+    linkBtn.className = 'tb-link-btn';
+    linkBtn.innerHTML = '🔗';
+    linkBtn.title = 'Terminal vinculada / Enfocar';
+    linkBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.setActiveTerminal(node.id);
+    });
+
+    // 4. Git Branch Button & Dropdown wrapper
+    const gitBranchWrapper = document.createElement('div');
+    gitBranchWrapper.className = 'tb-git-branch-wrapper';
+    gitBranchWrapper.id = `git-branch-wrapper-${node.id}`;
+
+    const gitBranchBtn = document.createElement('button');
+    gitBranchBtn.className = 'tb-git-branch-btn';
+    gitBranchBtn.id = `git-branch-btn-${node.id}`;
+    gitBranchBtn.innerHTML = '🌿 <span class="branch-name">...</span> ▾';
+    gitBranchBtn.title = 'Cambiar de rama Git o crear nueva';
+
+    const gitDropdown = document.createElement('div');
+    gitDropdown.className = 'tb-git-dropdown';
+    gitDropdown.id = `git-dropdown-${node.id}`;
+
+    gitBranchBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.tb-git-dropdown.show').forEach((m) => {
+        if (m !== gitDropdown) m.classList.remove('show');
+      });
+      this.populateGitBranchesDropdown(gitDropdown, node.id);
+      gitDropdown.classList.toggle('show');
+    });
+
+    gitBranchWrapper.appendChild(gitBranchBtn);
+    gitBranchWrapper.appendChild(gitDropdown);
+
+    // 5. Git User Button
+    const gitUserBtn = document.createElement('button');
+    gitUserBtn.className = 'tb-git-user-btn';
+    gitUserBtn.id = `git-user-btn-${node.id}`;
+    gitUserBtn.innerHTML = '👤 <span class="user-name">Git</span>';
+    gitUserBtn.title = 'Configurar usuario Git (user.name / user.email)';
+    gitUserBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openGitUserModal(node.id);
+    });
+
+    // 6. Git Action Quick Buttons (Status, Add, Unstage, Commit, Push, Pull, Fetch, Diff, Log, user Git)
+    const gitActions = document.createElement('div');
+    gitActions.className = 'tb-git-actions';
+    gitActions.id = `git-actions-${node.id}`;
+
+    const actionsList = [
+      { label: 'Status', cmd: 'git status\r' },
+      { label: 'Add', cmd: 'git add -A\r' },
+      { label: 'Unstage', cmd: 'git reset\r' },
+      { label: 'Commit', action: 'commit' },
+      { label: 'Push', cmd: 'git push\r' },
+      { label: 'Pull', cmd: 'git pull\r' },
+      { label: 'Fetch', cmd: 'git fetch\r' },
+      { label: 'Diff', cmd: 'git diff\r' },
+      { label: 'Log', cmd: 'git log --oneline -n 10\r' },
+      { label: 'user Git', action: 'user-git' }
+    ];
+
+    actionsList.forEach((act) => {
+      const btn = document.createElement('button');
+      btn.className = 'tb-git-action-btn';
+      btn.textContent = act.label;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.setActiveTerminal(node.id);
+        if (act.cmd) {
+          window.api.writeTerminal(node.id, act.cmd);
+        } else if (act.action === 'commit') {
+          const msg = prompt('Mensaje de commit:');
+          if (msg && msg.trim()) {
+            window.api.writeTerminal(node.id, `git commit -m "${msg.replace(/"/g, '\\"')}"\r`);
+          }
+        } else if (act.action === 'user-git') {
+          this.openGitUserModal(node.id);
+        }
+      });
+      gitActions.appendChild(btn);
+    });
+
+    // Fallback badge if folder is not git
+    const nonGitBadge = document.createElement('span');
+    nonGitBadge.className = 'tb-non-git-badge hidden';
+    nonGitBadge.id = `non-git-${node.id}`;
+    nonGitBadge.textContent = '(No es repo Git)';
+
+    leftGroup.appendChild(termLabel);
+    leftGroup.appendChild(shellSelect);
+    leftGroup.appendChild(linkBtn);
+    leftGroup.appendChild(gitBranchWrapper);
+    leftGroup.appendChild(gitUserBtn);
+    leftGroup.appendChild(gitActions);
+    leftGroup.appendChild(nonGitBadge);
+
+    // Right toolbar tools (Splits, SSH, Close)
+    const rightGroup = document.createElement('div');
+    rightGroup.className = 'tb-right-group';
+
+    // Split V
     const btnSplitV = document.createElement('button');
     btnSplitV.className = 'term-tool-btn';
     btnSplitV.innerHTML = '⬌ V';
@@ -467,7 +588,7 @@ class TuxTerminalApp {
       this.splitTerminal(node.id, 'vertical');
     });
 
-    // Split Horizontal button
+    // Split H
     const btnSplitH = document.createElement('button');
     btnSplitH.className = 'term-tool-btn';
     btnSplitH.innerHTML = '⬍ H';
@@ -477,7 +598,7 @@ class TuxTerminalApp {
       this.splitTerminal(node.id, 'horizontal');
     });
 
-    // SSH Dropdown Menu
+    // SSH Dropdown
     const sshWrapper = document.createElement('div');
     sshWrapper.className = 'ssh-select-wrapper';
 
@@ -491,7 +612,6 @@ class TuxTerminalApp {
 
     btnSsh.addEventListener('click', (e) => {
       e.stopPropagation();
-      // Close other dropdowns
       document.querySelectorAll('.ssh-dropdown-menu.show').forEach((m) => {
         if (m !== sshDropdown) m.classList.remove('show');
       });
@@ -502,7 +622,7 @@ class TuxTerminalApp {
     sshWrapper.appendChild(btnSsh);
     sshWrapper.appendChild(sshDropdown);
 
-    // Close terminal button
+    // Close terminal
     const btnClose = document.createElement('button');
     btnClose.className = 'term-tool-btn danger';
     btnClose.innerHTML = '✕';
@@ -512,13 +632,13 @@ class TuxTerminalApp {
       this.closeTerminal(node.id);
     });
 
-    tools.appendChild(btnSplitV);
-    tools.appendChild(btnSplitH);
-    tools.appendChild(sshWrapper);
-    tools.appendChild(btnClose);
+    rightGroup.appendChild(btnSplitV);
+    rightGroup.appendChild(btnSplitH);
+    rightGroup.appendChild(sshWrapper);
+    rightGroup.appendChild(btnClose);
 
-    header.appendChild(titleArea);
-    header.appendChild(tools);
+    header.appendChild(leftGroup);
+    header.appendChild(rightGroup);
 
     // Terminal Body Container for xterm
     const body = document.createElement('div');
@@ -528,12 +648,10 @@ class TuxTerminalApp {
     pane.appendChild(header);
     pane.appendChild(body);
 
-    // Click inside pane activates it
     pane.addEventListener('pointerdown', () => {
       this.setActiveTerminal(node.id);
     });
 
-    // Right-click context menu
     pane.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       this.showContextMenu(e.clientX, e.clientY, node.id);
@@ -542,46 +660,139 @@ class TuxTerminalApp {
     return pane;
   }
 
-  populateSshDropdown(menuEl, targetTermId) {
-    menuEl.innerHTML = '';
-    if (this.profiles.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'ssh-dropdown-item';
-      empty.textContent = 'Sin perfiles guardados';
-      menuEl.appendChild(empty);
-    } else {
-      this.profiles.forEach((p) => {
-        const item = document.createElement('div');
-        item.className = 'ssh-dropdown-item';
-        item.innerHTML = `<span>${p.name}</span> <small style="color:var(--text-dim)">${p.username}@${p.host}</small>`;
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          menuEl.classList.remove('show');
-          this.connectSshProfile(targetTermId, p);
-        });
-        menuEl.appendChild(item);
-      });
-    }
+  populateShellSelect(selectEl, termId) {
+    selectEl.innerHTML = '';
+    const inst = this.terminals.get(termId);
+    const activeShellPath = inst ? inst.shellPath : (this.availableShells[0]?.path || '');
 
-    // Link to open manager
-    const manageItem = document.createElement('div');
-    manageItem.className = 'ssh-dropdown-item action';
-    manageItem.innerHTML = '➕ Administrar perfiles...';
-    manageItem.addEventListener('click', (e) => {
-      e.stopPropagation();
-      menuEl.classList.remove('show');
-      this.openSshModal();
+    this.availableShells.forEach((sh) => {
+      const opt = document.createElement('option');
+      opt.value = sh.path;
+      opt.textContent = sh.name;
+      if (sh.path === activeShellPath) {
+        opt.selected = true;
+      }
+      selectEl.appendChild(opt);
     });
-    menuEl.appendChild(manageItem);
   }
 
-  // ================= TERMINAL INSTANCES =================
+  async handleSwitchShell(termId, newShellPath) {
+    const inst = this.terminals.get(termId);
+    if (!inst) return;
+
+    inst.shellPath = newShellPath;
+    if (inst.term) {
+      inst.term.clear();
+      inst.term.write(`\r\n\x1b[36mCambiando shell a: ${newShellPath}...\x1b[0m\r\n\r\n`);
+    }
+
+    try {
+      await window.api.switchTerminalShell(termId, newShellPath, inst.term?.cols || 80, inst.term?.rows || 24);
+      this.refreshGitInfo(termId);
+    } catch (e) {
+      console.error('Error switching shell:', e);
+    }
+  }
+
+  // ================= GIT INFORMATION & BRANCHES =================
+  async refreshGitInfo(termId) {
+    try {
+      const gitInfo = await window.api.getGitInfo(termId);
+      const inst = this.terminals.get(termId);
+      if (inst) inst.gitInfo = gitInfo;
+
+      const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
+      const branchBtn = document.getElementById(`git-branch-btn-${termId}`);
+      const userBtn = document.getElementById(`git-user-btn-${termId}`);
+      const gitActions = document.getElementById(`git-actions-${termId}`);
+      const nonGitBadge = document.getElementById(`non-git-${termId}`);
+
+      if (!branchWrapper || !branchBtn) return;
+
+      if (gitInfo && gitInfo.isRepo) {
+        branchWrapper.classList.remove('hidden');
+        userBtn.classList.remove('hidden');
+        gitActions.classList.remove('hidden');
+        if (nonGitBadge) nonGitBadge.classList.add('hidden');
+
+        branchBtn.querySelector('.branch-name').textContent = gitInfo.branch;
+        userBtn.querySelector('.user-name').textContent = gitInfo.userName || 'Git';
+      } else {
+        branchWrapper.classList.add('hidden');
+        userBtn.classList.add('hidden');
+        gitActions.classList.add('hidden');
+        if (nonGitBadge) nonGitBadge.classList.remove('hidden');
+      }
+    } catch (e) {}
+  }
+
+  updateAllGitInfo() {
+    for (const termId of this.terminals.keys()) {
+      this.refreshGitInfo(termId);
+    }
+  }
+
+  populateGitBranchesDropdown(dropdownEl, termId) {
+    dropdownEl.innerHTML = '';
+    const inst = this.terminals.get(termId);
+    const gitInfo = inst?.gitInfo;
+
+    if (!gitInfo || !gitInfo.isRepo) {
+      const empty = document.createElement('div');
+      empty.className = 'tb-git-dropdown-item';
+      empty.textContent = 'No es un repositorio Git';
+      dropdownEl.appendChild(empty);
+      return;
+    }
+
+    // List branches
+    (gitInfo.branches || [gitInfo.branch]).forEach((bName) => {
+      const item = document.createElement('div');
+      item.className = `tb-git-dropdown-item ${bName === gitInfo.branch ? 'active' : ''}`;
+      item.textContent = bName;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdownEl.classList.remove('show');
+        if (bName !== gitInfo.branch) {
+          window.api.writeTerminal(termId, `git checkout ${bName}\r`);
+          setTimeout(() => this.refreshGitInfo(termId), 500);
+        }
+      });
+      dropdownEl.appendChild(item);
+    });
+
+    // New Branch option
+    const newBranchItem = document.createElement('div');
+    newBranchItem.className = 'tb-git-dropdown-item new-branch';
+    newBranchItem.innerHTML = '➕ Nueva rama...';
+    newBranchItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownEl.classList.remove('show');
+      const branchName = prompt('Nombre de la nueva rama:');
+      if (branchName && branchName.trim()) {
+        window.api.writeTerminal(termId, `git checkout -b ${branchName.trim()}\r`);
+        setTimeout(() => this.refreshGitInfo(termId), 500);
+      }
+    });
+    dropdownEl.appendChild(newBranchItem);
+  }
+
+  openGitUserModal(termId) {
+    this.gitTargetTermId = termId;
+    const inst = this.terminals.get(termId);
+    const gitInfo = inst?.gitInfo;
+
+    document.getElementById('git-user-name').value = gitInfo?.userName || '';
+    document.getElementById('git-user-email').value = gitInfo?.userEmail || '';
+    this.modalGitUser.classList.remove('hidden');
+  }
+
+  // ================= TERMINAL MOUNTING =================
   initUnmountedTerminals(node) {
     if (node.type === 'terminal') {
       if (!this.terminals.has(node.id)) {
         this.mountTerminal(node);
       } else {
-        // If already exists, re-attach to the new DOM node if needed
         const existing = this.terminals.get(node.id);
         const bodyEl = document.getElementById(`body-${node.id}`);
         if (bodyEl && !bodyEl.contains(existing.term.element)) {
@@ -607,7 +818,6 @@ class TuxTerminalApp {
       return;
     }
 
-    // Create xterm instance
     const term = new TerminalClass({
       theme: {
         background: '#0c0d12',
@@ -640,59 +850,64 @@ class TuxTerminalApp {
     if (webLinksAddon) term.loadAddon(webLinksAddon);
 
     term.open(bodyEl);
-    fitAddon.fit();
+    if (fitAddon) fitAddon.fit();
 
-    // Create backend PTY
     const cols = term.cols || 80;
     const rows = term.rows || 24;
+    const defaultShell = this.availableShells[0]?.path || null;
 
     try {
       const ptyResult = await window.api.createTerminal({
         id: node.id,
         cols,
         rows,
+        shellPath: node.shellPath || defaultShell,
         initialCommand: node.initialCommand || null
       });
 
-      // Bind data sending
       term.onData((data) => {
         window.api.writeTerminal(node.id, data);
+        // On Enter or prompt submit, trigger git check quickly
+        if (data.includes('\r')) {
+          setTimeout(() => this.refreshGitInfo(node.id), 400);
+        }
       });
 
-      // Bind data receiving from pty
       const unsubData = window.api.onTerminalData(node.id, (data) => {
         term.write(data);
       });
 
-      // Bind exit listener
       const unsubExit = window.api.onTerminalExit(node.id, ({ exitCode }) => {
         term.write(`\r\n\x1b[33m[Proceso finalizado con código ${exitCode}]\x1b[0m\r\n`);
-      });
-
-      // On terminal focus
-      term.onSelectionChange(() => {
-        // selection changed
       });
 
       const termInfo = {
         term,
         fitAddon,
         ptyId: node.id,
+        shellPath: ptyResult.shellPath,
         unsubData,
         unsubExit,
-        title: node.title || 'Terminal'
+        title: node.title || 'Terminal',
+        gitInfo: null
       };
 
       this.terminals.set(node.id, termInfo);
 
-      // Auto-set as active if none is active
+      // Select matching shell in the dropdown
+      const shellSelect = document.getElementById(`shell-select-${node.id}`);
+      if (shellSelect) {
+        shellSelect.value = ptyResult.shellPath;
+      }
+
       if (!this.activeTerminalId) {
         this.setActiveTerminal(node.id);
       }
 
       setTimeout(() => {
-        fitAddon.fit();
-      }, 50);
+        if (fitAddon) fitAddon.fit();
+        this.refreshGitInfo(node.id);
+      }, 80);
     } catch (err) {
       console.error('Failed to create terminal backend:', err);
       term.write(`\r\n\x1b[31mError al iniciar la consola: ${err.message}\x1b[0m\r\n`);
@@ -702,7 +917,6 @@ class TuxTerminalApp {
   setActiveTerminal(termId) {
     this.activeTerminalId = termId;
 
-    // Highlight pane in DOM
     document.querySelectorAll('.terminal-pane').forEach((p) => {
       p.classList.toggle('active-pane', p.getAttribute('data-term-id') === termId);
     });
@@ -745,7 +959,7 @@ class TuxTerminalApp {
         return {
           id: 'split_' + Math.random().toString(36).substring(2, 9),
           type: 'split',
-          orientation: orientation, // 'horizontal' or 'vertical'
+          orientation: orientation,
           ratio: 0.5,
           first: node,
           second: newTermNode
@@ -767,12 +981,10 @@ class TuxTerminalApp {
     const tab = this.tabs.find((t) => t.id === this.activeTabId);
     if (!tab) return;
 
-    // If it's the root and only terminal of the tab:
     if (tab.tree.id === termId && tab.tree.type === 'terminal') {
       if (this.tabs.length > 1) {
         this.closeTab(tab.id);
       } else {
-        // Can't close last terminal in last tab, restart clean
         this.destroyTerminalInstance(termId);
         const newId = 'term_' + Math.random().toString(36).substring(2, 9);
         tab.tree = { id: newId, type: 'terminal', title: 'Terminal 1' };
@@ -782,16 +994,11 @@ class TuxTerminalApp {
       return;
     }
 
-    // Find parent in split tree and replace with the other sibling
     const removeFromTree = (node) => {
       if (node.type !== 'split') return node;
 
-      if (node.first.id === termId) {
-        return node.second;
-      }
-      if (node.second.id === termId) {
-        return node.first;
-      }
+      if (node.first.id === termId) return node.second;
+      if (node.second.id === termId) return node.first;
 
       node.first = removeFromTree(node.first);
       node.second = removeFromTree(node.second);
@@ -801,7 +1008,6 @@ class TuxTerminalApp {
     this.destroyTerminalInstance(termId);
     tab.tree = removeFromTree(tab.tree);
 
-    // Pick another terminal to activate
     const remainingTerms = this.getLeafTerminals(tab.tree);
     if (remainingTerms.length > 0) {
       this.activeTerminalId = remainingTerms[0].id;
@@ -842,8 +1048,6 @@ class TuxTerminalApp {
   showContextMenu(x, y, termId) {
     this.contextTargetTermId = termId;
     this.setActiveTerminal(termId);
-
-    // Build SSH submenu in context menu
     this.populateSshDropdown(this.ctxSshSubmenu, termId);
 
     this.contextMenu.style.left = `${Math.min(window.innerWidth - 220, x)}px`;
@@ -882,6 +1086,38 @@ class TuxTerminalApp {
   }
 
   // ================= SSH PROFILES =================
+  populateSshDropdown(menuEl, targetTermId) {
+    menuEl.innerHTML = '';
+    if (this.profiles.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'ssh-dropdown-item';
+      empty.textContent = 'Sin perfiles guardados';
+      menuEl.appendChild(empty);
+    } else {
+      this.profiles.forEach((p) => {
+        const item = document.createElement('div');
+        item.className = 'ssh-dropdown-item';
+        item.innerHTML = `<span>${p.name}</span> <small style="color:var(--text-dim)">${p.username}@${p.host}</small>`;
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menuEl.classList.remove('show');
+          this.connectSshProfile(targetTermId, p);
+        });
+        menuEl.appendChild(item);
+      });
+    }
+
+    const manageItem = document.createElement('div');
+    manageItem.className = 'ssh-dropdown-item action';
+    manageItem.innerHTML = '➕ Administrar perfiles...';
+    manageItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menuEl.classList.remove('show');
+      this.openSshModal();
+    });
+    menuEl.appendChild(manageItem);
+  }
+
   connectSshProfile(termId, profile) {
     let sshCmd = 'ssh';
     if (profile.port && Number(profile.port) !== 22) {
@@ -895,19 +1131,7 @@ class TuxTerminalApp {
     }
     sshCmd += ` ${profile.username}@${profile.host}`;
 
-    // Send command to the active terminal
     window.api.writeTerminal(termId, `${sshCmd}\r`);
-
-    // Update UI title and badge
-    const badgeEl = document.getElementById(`badge-${termId}`);
-    const titleEl = document.getElementById(`title-${termId}`);
-    if (badgeEl) {
-      badgeEl.textContent = 'SSH';
-      badgeEl.style.backgroundColor = 'rgba(0, 173, 181, 0.25)';
-    }
-    if (titleEl) {
-      titleEl.textContent = `${profile.name} (${profile.host})`;
-    }
 
     const inst = this.terminals.get(termId);
     if (inst) {
@@ -1017,7 +1241,7 @@ class TuxTerminalApp {
     this.clearSshForm();
   }
 
-  // ================= GENERAL SESSIONS (PERSISTENCE) =================
+  // ================= GENERAL SESSIONS =================
   async openSessionModal() {
     await this.renderSessionsList();
     this.modalSession.classList.remove('hidden');
@@ -1084,7 +1308,8 @@ class TuxTerminalApp {
       const inst = this.terminals.get(node.id);
       return {
         type: 'terminal',
-        title: inst ? inst.title : node.title
+        title: inst ? inst.title : node.title,
+        shellPath: inst ? inst.shellPath : null
       };
     }
     return {
@@ -1120,7 +1345,6 @@ class TuxTerminalApp {
   restoreSession(sess) {
     if (!sess.tabs || sess.tabs.length === 0) return;
 
-    // Destroy all current terminals and tabs
     this.tabs.forEach((tab) => {
       this.destroySubtreeTerminals(tab.tree);
       const view = document.getElementById(`view-${tab.id}`);
@@ -1129,14 +1353,14 @@ class TuxTerminalApp {
     this.tabs = [];
     this.terminals.clear();
 
-    // Rebuild tree assigning fresh runtime IDs
     const assignIds = (node) => {
       const id = (node.type === 'terminal' ? 'term_' : 'split_') + Math.random().toString(36).substring(2, 9);
       if (node.type === 'terminal') {
         return {
           id,
           type: 'terminal',
-          title: node.title || 'Terminal'
+          title: node.title || 'Terminal',
+          shellPath: node.shellPath || null
         };
       }
       return {
@@ -1198,7 +1422,6 @@ class TuxTerminalApp {
 
       actions.appendChild(btnApply);
 
-      // Only allow deleting user-created templates
       if (!['Single Terminal', '2 Terminals Vertical', '2 Terminals Horizontal', '4 Terminals (2x2 Grid)'].includes(tmpl.name)) {
         const btnDelete = document.createElement('button');
         btnDelete.className = 'btn btn-sm btn-danger';
@@ -1242,10 +1465,8 @@ class TuxTerminalApp {
     const tab = this.tabs.find((t) => t.id === this.activeTabId);
     if (!tab) return;
 
-    // Destroy existing terminals in this tab
     this.destroySubtreeTerminals(tab.tree);
 
-    // Assign fresh IDs to template tree
     const assignIds = (node) => {
       const id = (node.type === 'terminal' ? 'term_' : 'split_') + Math.random().toString(36).substring(2, 9);
       if (node.type === 'terminal') {
@@ -1291,7 +1512,6 @@ class TuxTerminalApp {
   }
 }
 
-// Bootstrap application once DOM is loaded
 window.addEventListener('DOMContentLoaded', () => {
   window.appInstance = new TuxTerminalApp();
 });

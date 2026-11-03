@@ -1,8 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  // Shells
+  getAvailableShells: () => ipcRenderer.invoke('shells:get-available'),
+
   // PTY operations
   createTerminal: (params) => ipcRenderer.invoke('terminal:create', params),
+  switchTerminalShell: (id, shellPath) => ipcRenderer.invoke('terminal:switch-shell', { id, shellPath }),
   writeTerminal: (id, data) => ipcRenderer.send('terminal:write', { id, data }),
   resizeTerminal: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
   killTerminal: (id) => ipcRenderer.invoke('terminal:kill', { id }),
@@ -20,6 +24,10 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
+
+  // Git integration
+  getGitInfo: (id) => ipcRenderer.invoke('git:get-info', { id }),
+  setGitUser: (id, name, email) => ipcRenderer.invoke('git:set-user', { id, name, email }),
 
   // SSH Profiles
   getProfiles: () => ipcRenderer.invoke('profiles:get'),

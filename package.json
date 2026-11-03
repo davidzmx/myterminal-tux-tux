@@ -1,15 +1,21 @@
 {
   "name": "myterminal-tux-tux",
   "version": "1.0.0",
-  "description": "Multiplatform terminal emulator with Terminator-style splits, tabs, SSH profiles and session persistence",
+  "description": "Multiplatform terminal emulator with Terminator-style splits, tabs, Git integration, SSH profiles and session persistence",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:linux:portable": "electron-builder --linux AppImage",
+    "dist:win": "electron-builder --win portable nsis",
+    "dist:win:portable": "electron-builder --win portable",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:all": "electron-builder -mwl"
   },
   "keywords": [
     "terminal",
     "terminator",
+    "git",
     "ssh",
     "splits",
     "xterm",
@@ -24,6 +30,38 @@
     "node-pty": "^1.0.2"
   },
   "devDependencies": {
-    "electron": "^33.2.1"
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.tuxtux.myterminal",
+    "productName": "MyTerminal Tux Tux",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "TerminalEmulator"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
+    }
   }
 }
