@@ -303,14 +303,24 @@ class TuxTerminalApp {
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const modalId = btn.getAttribute('data-close-modal');
-        document.getElementById(modalId).classList.add('hidden');
+        this.closeModal(modalId);
       });
     });
 
     document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
-        e.target.closest('.modal').classList.add('hidden');
+        const modal = e.target.closest('.modal');
+        if (modal) this.closeModal(modal);
       });
+    });
+
+    this.initModalFocusObserver();
+
+    // Re-focus terminal when Electron window regains focus (e.g. returning from OS file dialog)
+    window.addEventListener('focus', () => {
+      if (!this.hasOpenModal()) {
+        this.refocusActiveTerminal();
+      }
     });
 
     document.querySelectorAll('.settings-nav-btn').forEach((btn) => {
@@ -469,7 +479,7 @@ class TuxTerminalApp {
       await window.api.saveConfig(this.config);
       this.renderGitActionsConfig();
       this.refreshAllGitToolbars();
-      this.modalEditGitAction.classList.add('hidden');
+      this.closeModal(this.modalEditGitAction);
     });
 
     // SSH form auth type toggle
@@ -509,11 +519,11 @@ class TuxTerminalApp {
     this.btnSshConnectActive.addEventListener('click', () => {
       const profile = this.getSelectedFormProfile();
       if (profile && this.activeTerminalId) {
-        this.modalSsh.classList.add('hidden');
+        this.closeModal(this.modalSsh);
         this.handleSshProfileSelection(this.activeTerminalId, profile);
         setTimeout(() => {
           const inst = this.terminals.get(this.activeTerminalId);
-          if (inst && inst.term) inst.term.focus();
+          if (inst && inst.term) this.focusTerminal(inst);
         }, 120);
       } else if (!this.activeTerminalId) {
         alert('Selecciona o haz clic en una terminal primero.');
@@ -523,7 +533,7 @@ class TuxTerminalApp {
     this.modalSshSwitch = document.getElementById('modal-ssh-switch');
 
     document.getElementById('btn-ssh-switch-replace').addEventListener('click', () => {
-      this.modalSshSwitch.classList.add('hidden');
+      this.closeModal(this.modalSshSwitch);
       const termId = this.sshSwitchTermId;
       const targetProfile = this.sshSwitchTargetProfile;
       if (!termId || !targetProfile) return;
@@ -541,7 +551,7 @@ class TuxTerminalApp {
     });
 
     document.getElementById('btn-ssh-switch-split').addEventListener('click', () => {
-      this.modalSshSwitch.classList.add('hidden');
+      this.closeModal(this.modalSshSwitch);
       const termId = this.sshSwitchTermId;
       const targetProfile = this.sshSwitchTargetProfile;
       if (!termId || !targetProfile) return;
@@ -554,7 +564,7 @@ class TuxTerminalApp {
     });
 
     document.getElementById('btn-ssh-switch-tab').addEventListener('click', () => {
-      this.modalSshSwitch.classList.add('hidden');
+      this.closeModal(this.modalSshSwitch);
       const targetProfile = this.sshSwitchTargetProfile;
       if (!targetProfile) return;
 
@@ -697,7 +707,7 @@ class TuxTerminalApp {
       const email = document.getElementById('git-user-email').value.trim();
 
       await window.api.setGitUser(termId, name, email);
-      this.modalGitUser.classList.add('hidden');
+      this.closeModal(this.modalGitUser);
       this.refreshGitInfo(termId);
     });
 
@@ -823,6 +833,14 @@ class TuxTerminalApp {
           if (this.activeTerminalId) this.copyTerminalSelection(this.activeTerminalId);
         }
       }
+
+      if (e.key === 'Escape') {
+        const openModals = Array.from(document.querySelectorAll('.modal:not(.hidden)'));
+        if (openModals.length > 0) {
+          e.preventDefault();
+          this.closeModal(openModals[openModals.length - 1]);
+        }
+      }
     });
 
     // Ensure active terminal retains focus on paste
@@ -858,7 +876,7 @@ class TuxTerminalApp {
     if (btnConfirmCloseTerm) {
       btnConfirmCloseTerm.addEventListener('click', () => {
         const modal = document.getElementById('modal-confirm-close-terminal');
-        if (modal) modal.classList.add('hidden');
+        if (modal) this.closeModal(modal);
         if (this.pendingCloseTermId) {
           const tId = this.pendingCloseTermId;
           this.pendingCloseTermId = null;
@@ -874,6 +892,70 @@ class TuxTerminalApp {
     this.modalZIndexCounter = Math.max(this.modalZIndexCounter || 1000, 1000) + 10;
     modal.style.zIndex = this.modalZIndexCounter;
     modal.classList.remove('hidden');
+  }
+
+  closeModal(modal) {
+    if (!modal) return;
+    const modalEl = typeof modal === 'string' ? document.getElementById(modal) : modal;
+    if (!modalEl) return;
+    modalEl.classList.add('hidden');
+    if (!this.hasOpenModal()) {
+      this.refocusActiveTerminal();
+    }
+  }
+
+  hasOpenModal() {
+    const openModals = document.querySelectorAll('.modal:not(.hidden)');
+    return openModals.length > 0;
+  }
+
+  refocusActiveTerminal() {
+    let targetId = this.activeTerminalId;
+    if (!targetId) {
+      const currentTab = this.tabs.find((t) => t.id === this.activeTabId);
+      if (currentTab) {
+        const leaves = this.getLeafTerminals(currentTab.tree);
+        if (leaves.length > 0) {
+          targetId = leaves[0].id;
+          this.activeTerminalId = targetId;
+        }
+      }
+    }
+
+    if (targetId) {
+      const inst = this.terminals.get(targetId);
+      if (inst && inst.term) {
+        document.querySelectorAll('.terminal-pane').forEach((p) => {
+          p.classList.toggle('active-pane', p.getAttribute('data-term-id') === targetId);
+        });
+        this.focusTerminal(inst);
+      }
+    }
+  }
+
+  initModalFocusObserver() {
+    const modals = document.querySelectorAll('.modal');
+    if (modals.length === 0) return;
+
+    const observer = new MutationObserver((mutations) => {
+      let modalClosed = false;
+      for (const m of mutations) {
+        if (m.type === 'attributes' && m.attributeName === 'class') {
+          const target = m.target;
+          if (target && target.classList && target.classList.contains('hidden')) {
+            modalClosed = true;
+          }
+        }
+      }
+
+      if (modalClosed && !this.hasOpenModal()) {
+        this.refocusActiveTerminal();
+      }
+    });
+
+    modals.forEach((modal) => {
+      observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
   }
 
   // ================= APPLICATION EXIT CONFIRMATION =================
@@ -1166,7 +1248,7 @@ class TuxTerminalApp {
     this.fitAllTerminals();
 
     await window.api.saveConfig(this.config);
-    this.modalSettings.classList.add('hidden');
+    this.closeModal(this.modalSettings);
   }
 
   populateConfigGroupSelect() {
@@ -1446,7 +1528,7 @@ class TuxTerminalApp {
     }
 
     await window.api.saveConfig(this.config);
-    this.modalEditButtonGroup.classList.add('hidden');
+    this.closeModal(this.modalEditButtonGroup);
     this.renderGitActionsConfig();
     this.refreshAllGitToolbars();
   }
@@ -1530,7 +1612,7 @@ class TuxTerminalApp {
     await window.api.saveConfig(this.config);
     this.refreshAllGitToolbars();
     this.updateAllGitInfo();
-    this.modalSettings.classList.add('hidden');
+    this.closeModal(this.modalSettings);
   }
 
   refreshAllGitToolbars() {
@@ -1656,7 +1738,7 @@ class TuxTerminalApp {
     this.config.favorites = updated;
     await window.api.saveConfig(this.config);
     this.renderFavoritesConfig();
-    this.modalSettings.classList.add('hidden');
+    this.closeModal(this.modalSettings);
   }
 
   async openAddFavoriteModal(termId = null, existingFav = null) {
@@ -1729,7 +1811,7 @@ class TuxTerminalApp {
     }
 
     await window.api.saveConfig(this.config);
-    if (modal) modal.classList.add('hidden');
+    if (modal) this.closeModal(modal);
     this.renderFavoritesConfig();
   }
 
@@ -3084,7 +3166,7 @@ class TuxTerminalApp {
     const fullCmd = `${prefixCmd}${cmd}`;
     window.api.writeTerminal(termId, `${fullCmd}\r`);
     if (this.modalGitCommit) {
-      this.modalGitCommit.classList.add('hidden');
+      this.closeModal(this.modalGitCommit);
     }
     setTimeout(() => this.refreshGitInfo(termId), 600);
   }
@@ -3212,7 +3294,7 @@ class TuxTerminalApp {
 
     window.api.writeTerminal(termId, `${cmd}\r`);
     if (this.modalGitAdd) {
-      this.modalGitAdd.classList.add('hidden');
+      this.closeModal(this.modalGitAdd);
     }
     setTimeout(() => this.refreshGitInfo(termId), 600);
   }
@@ -3340,7 +3422,7 @@ class TuxTerminalApp {
 
     window.api.writeTerminal(termId, `${cmd}\r`);
     if (this.modalGitUnstage) {
-      this.modalGitUnstage.classList.add('hidden');
+      this.closeModal(this.modalGitUnstage);
     }
     setTimeout(() => this.refreshGitInfo(termId), 600);
   }
@@ -3721,6 +3803,7 @@ class TuxTerminalApp {
     requestAnimationFrame(doFocus);
     setTimeout(doFocus, 30);
     setTimeout(doFocus, 100);
+    setTimeout(doFocus, 250);
   }
 
   setActiveTerminal(termId) {
@@ -4401,7 +4484,7 @@ class TuxTerminalApp {
       btnRestore.textContent = 'Restaurar';
       btnRestore.addEventListener('click', () => {
         this.restoreSession(sess);
-        this.modalSession.classList.add('hidden');
+        this.closeModal(this.modalSession);
       });
 
       const btnDelete = document.createElement('button');
@@ -4568,7 +4651,7 @@ class TuxTerminalApp {
       btnOpen.title = 'Abrir como una nueva pestaña con sus terminales, rutas y sesiones SSH';
       btnOpen.addEventListener('click', () => {
         this.restoreSavedTab(tmpl);
-        this.modalTabLayout.classList.add('hidden');
+        this.closeModal(this.modalTabLayout);
       });
 
       actions.appendChild(btnOpen);
