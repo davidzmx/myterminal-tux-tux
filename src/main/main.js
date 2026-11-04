@@ -13,6 +13,7 @@ try {
 }
 
 let mainWindow = null;
+let isQuitting = false;
 const ptys = new Map(); // id -> { process, shellPath, cwd }
 
 // Helper: Detect installed shells across Linux, macOS, and Windows
@@ -461,6 +462,14 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+
+  mainWindow.on('close', (e) => {
+    if (isQuitting) return;
+    e.preventDefault();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:request-close');
+    }
+  });
 
   mainWindow.on('closed', () => {
     for (const [id, item] of ptys.entries()) {
@@ -1033,6 +1042,24 @@ function registerIpcHandlers() {
     return saveJsonFile('tab-templates.json', templates);
   });
 
+  // Application exit
+  ipcMain.handle('app:exit', () => {
+    isQuitting = true;
+    for (const [id, item] of ptys.entries()) {
+      try {
+        if (item.process) {
+          item.process.removeAllListeners();
+          item.process.kill();
+        }
+      } catch (e) {}
+    }
+    ptys.clear();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.destroy();
+    }
+    app.quit();
+  });
+
   // System info
   ipcMain.handle('system:get-home', () => {
     return os.homedir();
@@ -1047,6 +1074,13 @@ function registerIpcHandlers() {
     };
   });
 }
+
+app.on('before-quit', (e) => {
+  if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
+    e.preventDefault();
+    mainWindow.webContents.send('app:request-close');
+  }
+});
 
 app.whenReady().then(() => {
   registerIpcHandlers();

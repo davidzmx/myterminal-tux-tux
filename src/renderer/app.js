@@ -783,9 +783,26 @@ class TuxTerminalApp {
         } else if (e.key === 'W' || e.key === 'w') {
           e.preventDefault();
           if (this.activeTerminalId) this.closeTerminal(this.activeTerminalId);
+        } else if (e.key === 'Q' || e.key === 'q') {
+          e.preventDefault();
+          this.requestExitApp();
         }
       }
     });
+
+    // Listen for close/exit requests from main process (window close, OS quit)
+    if (window.api?.onRequestClose) {
+      window.api.onRequestClose(() => {
+        this.requestExitApp();
+      });
+    }
+
+    const btnConfirmExit = document.getElementById('btn-confirm-exit');
+    if (btnConfirmExit) {
+      btnConfirmExit.addEventListener('click', async () => {
+        await this.handleConfirmExit();
+      });
+    }
   }
 
   // ================= MODAL MANAGER =================
@@ -794,6 +811,84 @@ class TuxTerminalApp {
     this.modalZIndexCounter = Math.max(this.modalZIndexCounter || 1000, 1000) + 10;
     modal.style.zIndex = this.modalZIndexCounter;
     modal.classList.remove('hidden');
+  }
+
+  // ================= APPLICATION EXIT CONFIRMATION =================
+  getActiveSshSessions() {
+    const list = [];
+    for (const [termId, inst] of this.terminals.entries()) {
+      if (inst && inst.sshSession) {
+        list.push({
+          termId,
+          name: inst.sshSession.name,
+          host: inst.sshSession.host,
+          username: inst.sshSession.username,
+          port: inst.sshSession.port || 22
+        });
+      }
+    }
+    return list;
+  }
+
+  requestExitApp() {
+    const activeSsh = this.getActiveSshSessions();
+    const modalExit = document.getElementById('modal-confirm-exit');
+    const normalMsg = document.getElementById('exit-normal-msg');
+    const sshWarning = document.getElementById('exit-ssh-warning');
+    const sshList = document.getElementById('exit-ssh-list');
+    const btnConfirm = document.getElementById('btn-confirm-exit');
+
+    if (!modalExit) return;
+
+    if (activeSsh.length > 0) {
+      if (normalMsg) normalMsg.classList.add('hidden');
+      if (sshWarning) sshWarning.classList.remove('hidden');
+      if (sshList) {
+        sshList.innerHTML = '';
+        activeSsh.forEach((s) => {
+          const li = document.createElement('li');
+          const portStr = (s.port && Number(s.port) !== 22) ? `:${s.port}` : '';
+          li.innerHTML = `<b>${this.escapeHtml(s.name)}</b> <span style="font-family:monospace; color:var(--text-dim)">(${this.escapeHtml(s.username)}@${this.escapeHtml(s.host)}${portStr})</span>`;
+          sshList.appendChild(li);
+        });
+      }
+      if (btnConfirm) {
+        btnConfirm.className = 'btn btn-danger';
+        btnConfirm.textContent = '🚪 Desconectar y Salir';
+        btnConfirm.disabled = false;
+      }
+    } else {
+      if (normalMsg) normalMsg.classList.remove('hidden');
+      if (sshWarning) sshWarning.classList.add('hidden');
+      if (btnConfirm) {
+        btnConfirm.className = 'btn btn-primary';
+        btnConfirm.textContent = '🚪 Salir del programa';
+        btnConfirm.disabled = false;
+      }
+    }
+
+    this.openModal(modalExit);
+  }
+
+  async handleConfirmExit() {
+    const btnConfirm = document.getElementById('btn-confirm-exit');
+    if (btnConfirm) {
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = 'Desconectando...';
+    }
+
+    // Gracefully send exit to all active SSH sessions
+    for (const [termId, inst] of this.terminals.entries()) {
+      if (inst && (inst.sshSession || inst.pendingSshSession)) {
+        try {
+          window.api.writeTerminal(termId, 'exit\r');
+        } catch (e) {}
+      }
+    }
+
+    // Allow a brief moment for SSH process teardown and socket closure
+    await new Promise((r) => setTimeout(r, 160));
+    await window.api.exitApp();
   }
 
   // ================= SETTINGS MODAL =================
@@ -1478,7 +1573,12 @@ class TuxTerminalApp {
     this.tabs.forEach((tab) => {
       const tabEl = document.querySelector(`.tab-item[data-tab-id="${tab.id}"]`);
       if (tabEl) {
-        tabEl.classList.toggle('tab-ssh-active', this.isTabInSsh(tab.id));
+        const inSsh = this.isTabInSsh(tab.id);
+        tabEl.classList.toggle('tab-ssh-active', inSsh);
+        const ledEl = tabEl.querySelector('.tab-ssh-led');
+        if (ledEl) {
+          ledEl.classList.toggle('hidden', !inSsh);
+        }
       }
     });
   }
@@ -1489,6 +1589,10 @@ class TuxTerminalApp {
       const tabEl = document.createElement('div');
       tabEl.className = `tab-item ${tab.id === this.activeTabId ? 'active' : ''}`;
       tabEl.setAttribute('data-tab-id', tab.id);
+
+      const sshLed = document.createElement('span');
+      sshLed.className = `tab-ssh-led ${this.isTabInSsh(tab.id) ? '' : 'hidden'}`;
+      sshLed.title = 'Conexión SSH activa en esta pestaña';
 
       const titleEl = document.createElement('span');
       titleEl.className = 'tab-title';
@@ -1509,6 +1613,7 @@ class TuxTerminalApp {
         this.closeTab(tab.id);
       });
 
+      tabEl.appendChild(sshLed);
       tabEl.appendChild(titleEl);
       tabEl.appendChild(closeBtn);
 
@@ -1853,6 +1958,7 @@ class TuxTerminalApp {
     sshBadge.id = `ssh-badge-${node.id}`;
     sshBadge.innerHTML = `
       <span class="ssh-key-icon">🔑</span>
+      <span class="ssh-active-led" title="Conexión SSH activa"></span>
       <span class="ssh-badge-name" id="ssh-badge-name-${node.id}"></span>
       <span class="ssh-badge-host" id="ssh-badge-host-${node.id}"></span>
       <button type="button" class="ssh-disconnect-btn" id="ssh-disconnect-${node.id}" title="Desconectar sesión SSH y volver a la terminal local">✕ Desconectar</button>
@@ -3410,6 +3516,7 @@ class TuxTerminalApp {
       window.api.killTerminal(termId);
       if (inst.term) inst.term.dispose();
       this.terminals.delete(termId);
+      this.updateTabSshIndicators();
     }
   }
 

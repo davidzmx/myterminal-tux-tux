@@ -504,6 +504,46 @@ body.theme-light .ssh-badge-host {
   background-color: rgba(0, 0, 0, 0.3);
 }
 
+/* Active SSH Pulsing / Blinking Green LED Indicator */
+@keyframes ssh-led-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 6px #22c55e, 0 0 2px #4ade80;
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(0.8);
+    box-shadow: 0 0 1px #22c55e;
+  }
+}
+
+.ssh-active-led {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  margin: 0 2px;
+  flex-shrink: 0;
+  animation: ssh-led-blink 1.25s infinite ease-in-out;
+}
+
+.tab-ssh-led {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  margin-right: 5px;
+  flex-shrink: 0;
+  animation: ssh-led-blink 1.25s infinite ease-in-out;
+}
+
+.tab-ssh-led.hidden {
+  display: none !important;
+}
+
 .ssh-toggle-git-btn {
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -1394,7 +1434,8 @@ body.theme-light .ssh-select-btn:hover {
 #modal-ssh-switch,
 #modal-git-commit,
 #modal-git-add,
-#modal-git-unstage {
+#modal-git-unstage,
+#modal-confirm-exit {
   z-index: 2500 !important;
 }
 

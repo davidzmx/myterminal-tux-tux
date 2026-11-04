@@ -52,7 +52,13 @@ contextBridge.exposeInMainWorld('api', {
   saveTabTemplate: (name, templateData) => ipcRenderer.invoke('tab-templates:save', { name, templateData }),
   deleteTabTemplate: (name) => ipcRenderer.invoke('tab-templates:delete', name),
 
-  // System
+  // System & Application
   getHomeDir: () => ipcRenderer.invoke('system:get-home'),
-  getSystemInfo: () => ipcRenderer.invoke('system:info')
+  getSystemInfo: () => ipcRenderer.invoke('system:info'),
+  onRequestClose: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('app:request-close', listener);
+    return () => ipcRenderer.removeListener('app:request-close', listener);
+  },
+  exitApp: () => ipcRenderer.invoke('app:exit')
 });
