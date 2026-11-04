@@ -715,7 +715,7 @@ class TuxTerminalApp {
   }
 
   // ================= SETTINGS MODAL =================
-  openSettingsModal() {
+  openSettingsModal(tabName = 'tab-general-opts') {
     this.cfgThemeSelect.value = this.config.theme || 'dark';
     this.cfgDefaultDirSelect.value = this.config.defaultDir || 'cwd';
     this.cfgFontSizeInput.value = this.config.fontSize || 13;
@@ -1596,12 +1596,12 @@ class TuxTerminalApp {
     leftGroup.appendChild(termLabel);
     leftGroup.appendChild(shellSelect);
     leftGroup.appendChild(sshBadge);
-    leftGroup.appendChild(groupSelectWrapper);
     leftGroup.appendChild(gitBranchWrapper);
     leftGroup.appendChild(gitUserBtn);
+    leftGroup.appendChild(nonGitBadge);
+    leftGroup.appendChild(groupSelectWrapper);
     leftGroup.appendChild(gitActions);
     leftGroup.appendChild(gitOverflowWrapper);
-    leftGroup.appendChild(nonGitBadge);
 
     // Right toolbar tools (Splits, SSH, Close)
     const rightGroup = document.createElement('div');
@@ -1771,25 +1771,30 @@ class TuxTerminalApp {
 
     if (gitActions) {
       this.renderTerminalGitActions(gitActions, termId, group);
+      gitActions.classList.remove('hidden');
     }
 
-    if (group.isGit) {
-      if (inst && inst.sshSession) {
-        if (branchWrapper) branchWrapper.classList.add('hidden');
-        if (userBtn) userBtn.classList.add('hidden');
-        if (nonGitBadge) nonGitBadge.classList.add('hidden');
-      } else {
-        const isRepo = inst && inst.gitInfo && inst.gitInfo.isRepo;
-        if (branchWrapper) branchWrapper.classList.toggle('hidden', !isRepo);
-        if (userBtn) userBtn.classList.toggle('hidden', !isRepo);
-        if (nonGitBadge) nonGitBadge.classList.toggle('hidden', Boolean(isRepo));
-      }
-    } else {
-      // Non-Git group (Sistema, Docker, etc.) -> Works anywhere (local or remote)!
+    if (inst && inst.sshSession) {
       if (branchWrapper) branchWrapper.classList.add('hidden');
       if (userBtn) userBtn.classList.add('hidden');
       if (nonGitBadge) nonGitBadge.classList.add('hidden');
-      if (gitActions) gitActions.classList.remove('hidden');
+    } else {
+      const isRepo = Boolean(inst && inst.gitInfo && inst.gitInfo.isRepo);
+      // If it's a Git repo, ALWAYS show branch and user, even when button group is changed!
+      if (branchWrapper) branchWrapper.classList.toggle('hidden', !isRepo);
+      if (userBtn) userBtn.classList.toggle('hidden', !isRepo);
+      if (nonGitBadge) nonGitBadge.classList.toggle('hidden', isRepo || !group.isGit);
+
+      if (isRepo && inst.gitInfo) {
+        const branchNameEl = branchWrapper?.querySelector('.branch-name');
+        if (branchNameEl && inst.gitInfo.branch) {
+          branchNameEl.textContent = inst.gitInfo.branch;
+        }
+        const userNameEl = userBtn?.querySelector('.user-name');
+        if (userNameEl && inst.gitInfo.userName) {
+          userNameEl.textContent = inst.gitInfo.userName;
+        }
+      }
     }
 
     setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
@@ -2021,30 +2026,7 @@ class TuxTerminalApp {
       const gitInfo = await window.api.getGitInfo(termId);
       if (inst) inst.gitInfo = gitInfo;
 
-      const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
-      const branchBtn = document.getElementById(`git-branch-btn-${termId}`);
-      const userBtn = document.getElementById(`git-user-btn-${termId}`);
-      const gitActions = document.getElementById(`git-actions-${termId}`);
-      const nonGitBadge = document.getElementById(`non-git-${termId}`);
-
-      if (!branchWrapper || !branchBtn) return;
-
-      if (gitInfo && gitInfo.isRepo) {
-        branchWrapper.classList.remove('hidden');
-        userBtn.classList.remove('hidden');
-        gitActions.classList.remove('hidden');
-        if (nonGitBadge) nonGitBadge.classList.add('hidden');
-
-        branchBtn.querySelector('.branch-name').textContent = gitInfo.branch;
-        userBtn.querySelector('.user-name').textContent = gitInfo.userName || 'Git';
-      } else {
-        branchWrapper.classList.add('hidden');
-        userBtn.classList.add('hidden');
-        gitActions.classList.add('hidden');
-        if (nonGitBadge) nonGitBadge.classList.remove('hidden');
-      }
-
-      setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
+      this.updateTerminalActionButtons(termId);
     } catch (e) {}
   }
 

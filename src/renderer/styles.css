@@ -401,6 +401,12 @@ body.theme-light .tab-rename-input {
   cursor: pointer;
   outline: none;
   height: 24px;
+  width: 95px;
+  min-width: 95px;
+  max-width: 95px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
   position: relative;
   z-index: 5;
   pointer-events: auto !important;
@@ -419,6 +425,11 @@ body.theme-light .tab-rename-input {
 body.theme-light .tb-shell-select {
   background-color: #ffffff;
   border-color: #9ca3af;
+  color: #111827;
+}
+
+body.theme-light .tb-shell-select option {
+  background-color: #ffffff;
   color: #111827;
 }
 
@@ -650,6 +661,44 @@ body.theme-light .tb-group-btn:hover {
 .tb-group-dropdown-item.action:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
+}
+
+body.theme-light .tb-group-dropdown {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+body.theme-light .tb-group-dropdown-item {
+  color: #1e293b;
+}
+
+body.theme-light .tb-group-dropdown-item:hover {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+body.theme-light .tb-group-dropdown-item.active {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+body.theme-light .tb-group-dropdown-item.active:hover {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+body.theme-light .tb-group-dropdown-divider {
+  background-color: #e2e8f0;
+}
+
+body.theme-light .tb-group-dropdown-item.action {
+  color: #64748b;
+}
+
+body.theme-light .tb-group-dropdown-item.action:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
 }
 
 /* Git Branch Pill Button */
