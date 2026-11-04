@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -560,6 +560,94 @@ function registerIpcHandlers() {
 
   ipcMain.handle('config:save', (event, newConfig) => {
     return saveJsonFile('config.json', newConfig);
+  });
+
+  // Export / Import All Configuration (Backup across computers)
+  ipcMain.handle('config:export-all', async () => {
+    try {
+      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: 'Exportar Configuración Completa de MyTerminal Tux Tux',
+        defaultPath: 'myterminal-tux-tux-backup.json',
+        filters: [
+          { name: 'Archivos JSON (*.json)', extensions: ['json'] },
+          { name: 'Todos los archivos', extensions: ['*'] }
+        ]
+      });
+
+      if (canceled || !filePath) {
+        return { canceled: true };
+      }
+
+      const bundle = {
+        app: 'myterminal-tux-tux',
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        config: getUserConfig(),
+        profiles: loadJsonFile('ssh-profiles.json', []),
+        sessions: loadJsonFile('sessions.json', {}),
+        tabTemplates: loadJsonFile('tab-templates.json', {})
+      };
+
+      fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2), 'utf-8');
+      return { success: true, filePath };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('config:import-all', async () => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: 'Importar Configuración Completa de MyTerminal Tux Tux',
+        filters: [
+          { name: 'Archivos JSON (*.json)', extensions: ['json'] },
+          { name: 'Todos los archivos', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (canceled || !filePaths || filePaths.length === 0) {
+        return { canceled: true };
+      }
+
+      const raw = fs.readFileSync(filePaths[0], 'utf-8');
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (parseErr) {
+        return { success: false, error: 'El archivo seleccionado no es un JSON válido.' };
+      }
+
+      if (!data || typeof data !== 'object') {
+        return { success: false, error: 'El archivo seleccionado no contiene un formato de configuración válido.' };
+      }
+
+      if (data.config && typeof data.config === 'object') {
+        saveJsonFile('config.json', data.config);
+      }
+      if (Array.isArray(data.profiles)) {
+        saveJsonFile('ssh-profiles.json', data.profiles);
+      }
+      if (data.sessions && typeof data.sessions === 'object') {
+        saveJsonFile('sessions.json', data.sessions);
+      }
+      if (data.tabTemplates && typeof data.tabTemplates === 'object') {
+        saveJsonFile('tab-templates.json', data.tabTemplates);
+      }
+
+      return {
+        success: true,
+        filePath: filePaths[0],
+        importedData: {
+          config: data.config || null,
+          profiles: data.profiles || null,
+          sessions: data.sessions || null,
+          tabTemplates: data.tabTemplates || null
+        }
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 
   ipcMain.handle('config:reset-button-groups', () => {

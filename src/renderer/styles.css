@@ -2137,6 +2137,24 @@ body.theme-light .ssh-test-result-box.error {
   color: #b91c1c;
 }
 
+/* SSH Exit Modal Tab Badge */
+.ssh-exit-tab-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  white-space: nowrap;
+}
+
+body.theme-light .ssh-exit-tab-badge {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0369a1;
+}
+
 /* SSH Layout in modal */
 .ssh-manager-layout {
   display: flex;

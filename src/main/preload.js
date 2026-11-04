@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('config:get'),
   saveConfig: (newConfig) => ipcRenderer.invoke('config:save', newConfig),
   resetButtonGroups: () => ipcRenderer.invoke('config:reset-button-groups'),
+  exportAllConfig: () => ipcRenderer.invoke('config:export-all'),
+  importAllConfig: () => ipcRenderer.invoke('config:import-all'),
 
   // Shells
   getAvailableShells: () => ipcRenderer.invoke('shells:get-available'),

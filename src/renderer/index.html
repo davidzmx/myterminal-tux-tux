@@ -231,6 +231,7 @@
           <button class="settings-nav-btn active" data-settings-tab="tab-general-opts">General & Terminal</button>
           <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Grupos y Botones de Comandos</button>
           <button class="settings-nav-btn" data-settings-tab="tab-fav-opts">Carpetas Favoritas</button>
+          <button class="settings-nav-btn" data-settings-tab="tab-backup-opts">Copia de Seguridad & Migración</button>
         </div>
 
         <!-- Section 1: General Options -->
@@ -303,7 +304,7 @@
           </div>
 
           <!-- Group Selector & Manager Bar -->
-          <div class="button-group-manager-bar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-dark); padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; margin-bottom:12px;">
+          <div class="button-group-manager-bar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-dark); padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; margin-bottom:10px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <label for="cfg-button-group-select" style="font-weight:600; font-size:12px; margin:0; color:var(--text-main);">Grupo activo:</label>
               <select id="cfg-button-group-select" class="form-control" style="height:28px; font-weight:600; padding:2px 8px; font-size:12px; border-radius:4px; min-width:170px; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);"></select>
@@ -315,6 +316,21 @@
               <button type="button" id="btn-edit-group" class="btn btn-sm">✏️ Renombrar</button>
               <button type="button" id="btn-delete-group" class="btn btn-sm btn-danger">🗑️ Eliminar</button>
             </div>
+          </div>
+
+          <!-- Automatic Group Switching Configuration -->
+          <div style="background: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="cfg-default-non-git-group" style="font-weight: 600; font-size: 12px; color: var(--text-main); margin: 0;">Grupo por defecto fuera de Git:</label>
+                <select id="cfg-default-non-git-group" class="form-control" style="height: 28px; font-weight: 600; font-size: 12px; border-radius: 4px; padding: 2px 8px; min-width: 170px; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border-color);"></select>
+              </div>
+              <label style="font-weight: 500; font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
+                <input type="checkbox" id="cfg-auto-switch-git" checked style="cursor: pointer;">
+                <span>Activar grupo Git automáticamente al entrar a un repositorio</span>
+              </label>
+            </div>
+            <small class="form-hint" style="margin: 0;">En carpetas que no son repositorios Git se usará el grupo seleccionado (por defecto Sistema), y al entrar a un repositorio se activará el grupo Git.</small>
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -362,6 +378,51 @@
           <div class="form-actions">
             <span></span>
             <button id="btn-save-favorites-config" class="btn btn-primary">Guardar Favoritos</button>
+          </div>
+        </div>
+
+        <!-- Section 4: Backup & Migration Options -->
+        <div id="tab-backup-opts" class="settings-tab-pane">
+          <div class="git-actions-header">
+            <div>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Exporta o importa toda tu configuración para respaldarla o transferirla a otra computadora.</p>
+              <small class="form-hint" style="margin-top:0;">Incluye ajustes generales, grupos de botones, comandos, perfiles SSH, carpetas favoritas, plantillas y sesiones.</small>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+            <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                <span>📦</span> Copia de Seguridad Rápida (Recomendado)
+              </h4>
+              <p style="margin: 0 0 14px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+                Genera un único archivo <code>.json</code> portátil. Puedes llevarlo a otra computadora con MyTerminal Tux Tux e importarlo con un clic para dejar todo exactamente igual.
+              </p>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="button" id="btn-export-backup" class="btn btn-primary" style="padding: 8px 14px;">
+                  📤 Exportar toda la configuración...
+                </button>
+                <button type="button" id="btn-import-backup" class="btn btn-secondary" style="padding: 8px 14px;">
+                  📥 Importar configuración...
+                </button>
+              </div>
+              <div id="backup-status-msg" class="hidden" style="margin-top: 12px; padding: 8px 12px; border-radius: 4px; font-size: 12px;"></div>
+            </div>
+
+            <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                <span>📂</span> Opción Manual / Sistema de Archivos
+              </h4>
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+                Si prefieres copiar la configuración directamente entre discos o por red sin abrir el programa, todos los datos residen en la siguiente carpeta de tu usuario:
+              </p>
+              <div style="background: var(--bg-dark); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--accent-cyan); word-break: break-all; margin-bottom: 8px;" id="backup-folder-path">
+                ~/.config/myterminal-tux-tux/
+              </div>
+              <small class="form-hint" style="margin: 0;">
+                Solo copia los archivos <code>config.json</code>, <code>ssh-profiles.json</code>, <code>sessions.json</code> y <code>tab-templates.json</code> a la misma ruta en la otra computadora.
+              </small>
+            </div>
           </div>
         </div>
       </div>

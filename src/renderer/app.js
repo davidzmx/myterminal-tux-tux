@@ -122,9 +122,15 @@ class TuxTerminalApp {
       if (this.config.gitActions) {
         this.config.gitActions = this.config.gitActions.filter(a => a.action !== 'user-git' && a.label !== 'user Git');
       }
+      if (!this.config.defaultNonGitGroup) {
+        this.config.defaultNonGitGroup = 'group-system';
+      }
+      if (this.config.autoSwitchGitGroup === undefined) {
+        this.config.autoSwitchGitGroup = true;
+      }
     } catch (e) {
       console.error('Error loading config:', e);
-      this.config = { theme: 'dark', defaultDir: 'cwd', buttonGroups: [] };
+      this.config = { theme: 'dark', defaultDir: 'cwd', buttonGroups: [], defaultNonGitGroup: 'group-system', autoSwitchGitGroup: true };
     }
     this.selectedConfigGroupId = this.config.activeButtonGroup || this.config.buttonGroups?.[0]?.id || 'group-git';
 
@@ -387,6 +393,20 @@ class TuxTerminalApp {
     if (btnSaveFavs) {
       btnSaveFavs.addEventListener('click', async () => {
         await this.saveFavoritesConfig();
+      });
+    }
+
+    const btnExportBackup = document.getElementById('btn-export-backup');
+    if (btnExportBackup) {
+      btnExportBackup.addEventListener('click', async () => {
+        await this.handleExportBackup();
+      });
+    }
+
+    const btnImportBackup = document.getElementById('btn-import-backup');
+    if (btnImportBackup) {
+      btnImportBackup.addEventListener('click', async () => {
+        await this.handleImportBackup();
       });
     }
 
@@ -814,16 +834,28 @@ class TuxTerminalApp {
   }
 
   // ================= APPLICATION EXIT CONFIRMATION =================
+  getTabForTerminal(termId) {
+    for (const tab of this.tabs) {
+      const leaves = this.getLeafTerminals(tab.tree);
+      if (leaves.some((leaf) => leaf.id === termId)) {
+        return tab;
+      }
+    }
+    return null;
+  }
+
   getActiveSshSessions() {
     const list = [];
     for (const [termId, inst] of this.terminals.entries()) {
       if (inst && inst.sshSession) {
+        const tab = this.getTabForTerminal(termId);
         list.push({
           termId,
           name: inst.sshSession.name,
           host: inst.sshSession.host,
           username: inst.sshSession.username,
-          port: inst.sshSession.port || 22
+          port: inst.sshSession.port || 22,
+          tabTitle: tab ? tab.title : 'Principal'
         });
       }
     }
@@ -847,8 +879,15 @@ class TuxTerminalApp {
         sshList.innerHTML = '';
         activeSsh.forEach((s) => {
           const li = document.createElement('li');
+          li.style.cssText = 'display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:12px;';
           const portStr = (s.port && Number(s.port) !== 22) ? `:${s.port}` : '';
-          li.innerHTML = `<b>${this.escapeHtml(s.name)}</b> <span style="font-family:monospace; color:var(--text-dim)">(${this.escapeHtml(s.username)}@${this.escapeHtml(s.host)}${portStr})</span>`;
+          li.innerHTML = `
+            <div>
+              <b>${this.escapeHtml(s.name)}</b>
+              <span style="font-family:monospace; color:var(--text-dim); font-size:11px;">(${this.escapeHtml(s.username)}@${this.escapeHtml(s.host)}${portStr})</span>
+            </div>
+            <span class="ssh-exit-tab-badge">📑 ${this.escapeHtml(s.tabTitle)}</span>
+          `;
           sshList.appendChild(li);
         });
       }
@@ -891,6 +930,93 @@ class TuxTerminalApp {
     await window.api.exitApp();
   }
 
+  // ================= CONFIG BACKUP & MIGRATION =================
+  async handleExportBackup() {
+    const statusEl = document.getElementById('backup-status-msg');
+    const btnExport = document.getElementById('btn-export-backup');
+    if (statusEl) {
+      statusEl.className = 'hidden';
+      statusEl.textContent = '';
+    }
+
+    if (btnExport) btnExport.disabled = true;
+
+    try {
+      const res = await window.api.exportAllConfig();
+      if (res && res.canceled) {
+        return;
+      }
+      if (res && res.success) {
+        if (statusEl) {
+          statusEl.className = 'ssh-test-result-box success';
+          statusEl.innerHTML = `<span>✅ Configuración exportada exitosamente a:<br><code style="font-size:11px;">${this.escapeHtml(res.filePath)}</code></span>`;
+        }
+      } else {
+        if (statusEl) {
+          statusEl.className = 'ssh-test-result-box error';
+          statusEl.textContent = `❌ Error al exportar: ${res?.error || 'Desconocido'}`;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.className = 'ssh-test-result-box error';
+        statusEl.textContent = `❌ Error: ${err.message}`;
+      }
+    } finally {
+      if (btnExport) btnExport.disabled = false;
+    }
+  }
+
+  async handleImportBackup() {
+    const statusEl = document.getElementById('backup-status-msg');
+    const btnImport = document.getElementById('btn-import-backup');
+    if (statusEl) {
+      statusEl.className = 'hidden';
+      statusEl.textContent = '';
+    }
+
+    if (btnImport) btnImport.disabled = true;
+
+    try {
+      const res = await window.api.importAllConfig();
+      if (res && res.canceled) {
+        return;
+      }
+      if (res && res.success && res.importedData) {
+        // Apply imported config in memory
+        if (res.importedData.config) {
+          this.config = res.importedData.config;
+          this.applyTheme(this.config.theme || 'dark');
+          this.applySshHeaderColor();
+        }
+        if (res.importedData.profiles) {
+          this.profiles = res.importedData.profiles;
+          this.renderSshProfilesList();
+        }
+
+        this.refreshAllGitToolbars();
+        this.updateAllGitInfo();
+
+        if (statusEl) {
+          statusEl.className = 'ssh-test-result-box success';
+          statusEl.innerHTML = `<span>✅ Configuración importada con éxito desde:<br><code style="font-size:11px;">${this.escapeHtml(res.filePath)}</code><br>Todos los grupos, comandos, perfiles y preferencias se han actualizado.</span>`;
+        }
+      } else {
+        if (statusEl) {
+          statusEl.className = 'ssh-test-result-box error';
+          statusEl.textContent = `❌ Error al importar: ${res?.error || 'Formato no reconocido'}`;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.className = 'ssh-test-result-box error';
+        statusEl.textContent = `❌ Error al importar archivo: ${err.message}`;
+      }
+    } finally {
+      if (btnImport) btnImport.disabled = false;
+    }
+  }
+
   // ================= SETTINGS MODAL =================
   openSettingsModal(tabName = 'tab-general-opts') {
     this.cfgThemeSelect.value = this.config.theme || 'dark';
@@ -915,6 +1041,46 @@ class TuxTerminalApp {
       }
       this.cfgDefaultShellSelect.appendChild(opt);
     });
+
+    const nonGitSelect = document.getElementById('cfg-default-non-git-group');
+    if (nonGitSelect) {
+      nonGitSelect.innerHTML = '';
+      const groups = this.config.buttonGroups || [];
+      const currentNonGit = this.config.defaultNonGitGroup || 'group-system';
+      groups.forEach((g) => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = `${g.icon || '⚡'} ${g.name}`;
+        if (g.id === currentNonGit) opt.selected = true;
+        nonGitSelect.appendChild(opt);
+      });
+      nonGitSelect.onchange = async () => {
+        this.config.defaultNonGitGroup = nonGitSelect.value;
+        await window.api.saveConfig(this.config);
+        this.updateAllGitInfo();
+      };
+    }
+
+    const autoSwitchChk = document.getElementById('cfg-auto-switch-git');
+    if (autoSwitchChk) {
+      autoSwitchChk.checked = this.config.autoSwitchGitGroup !== false;
+      autoSwitchChk.onchange = async () => {
+        this.config.autoSwitchGitGroup = autoSwitchChk.checked;
+        await window.api.saveConfig(this.config);
+        this.updateAllGitInfo();
+      };
+    }
+
+    const backupFolderEl = document.getElementById('backup-folder-path');
+    if (backupFolderEl && this.homeDir) {
+      backupFolderEl.textContent = `${this.homeDir}/.config/myterminal-tux-tux/`;
+    }
+
+    const statusEl = document.getElementById('backup-status-msg');
+    if (statusEl) {
+      statusEl.className = 'hidden';
+      statusEl.textContent = '';
+    }
 
     this.renderGitActionsConfig();
     this.renderFavoritesConfig();
@@ -1274,8 +1440,14 @@ class TuxTerminalApp {
       this.config.gitActions = updated;
     }
 
+    const nonGitSelect = document.getElementById('cfg-default-non-git-group');
+    if (nonGitSelect) this.config.defaultNonGitGroup = nonGitSelect.value;
+    const autoSwitchChk = document.getElementById('cfg-auto-switch-git');
+    if (autoSwitchChk) this.config.autoSwitchGitGroup = autoSwitchChk.checked;
+
     await window.api.saveConfig(this.config);
     this.refreshAllGitToolbars();
+    this.updateAllGitInfo();
     this.modalSettings.classList.add('hidden');
   }
 
@@ -2567,6 +2739,30 @@ class TuxTerminalApp {
         this.updateGitButtonsOverflow(termId);
       }
 
+      // Automatic button group switching based on Git repository directory
+      if (this.config.autoSwitchGitGroup !== false) {
+        const groups = this.config.buttonGroups || [];
+        const gitGroup = groups.find((g) => g.isGit || g.id === 'group-git') || groups[0];
+        const nonGitGroupId = this.config.defaultNonGitGroup || 'group-system';
+        const nonGitGroup = groups.find((g) => g.id === nonGitGroupId) || groups.find((g) => !g.isGit) || groups[0];
+
+        if (isRepo) {
+          if ((!prevInfo || !prevInfo.isRepo || inst.activeGroupId === nonGitGroupId) && gitGroup) {
+            if (inst.activeGroupId !== gitGroup.id) {
+              inst.activeGroupId = gitGroup.id;
+              this.updateTerminalActionButtons(termId);
+            }
+          }
+        } else {
+          if ((!prevInfo || prevInfo.isRepo || (gitGroup && inst.activeGroupId === gitGroup.id)) && nonGitGroup) {
+            if (inst.activeGroupId !== nonGitGroup.id) {
+              inst.activeGroupId = nonGitGroup.id;
+              this.updateTerminalActionButtons(termId);
+            }
+          }
+        }
+      }
+
       if (isRepo) {
         if (branchChanged) {
           const branchNameEl = branchWrapper?.querySelector('.branch-name');
@@ -3326,7 +3522,7 @@ class TuxTerminalApp {
         pendingSshSession: null,
         sshPollTimer: null,
         sshShowGit: false,
-        activeGroupId: this.config.activeButtonGroup || 'group-git',
+        activeGroupId: this.config.defaultNonGitGroup || 'group-system',
         sshPwdListener: null
       };
 
