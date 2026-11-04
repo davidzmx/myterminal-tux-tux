@@ -570,9 +570,20 @@ function registerIpcHandlers() {
       const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
       const defaultFilename = `myterminal-config-${dateStr}.json`;
 
+      let defaultDir;
+      try {
+        defaultDir = app.getPath('downloads');
+      } catch (e) {
+        defaultDir = os.homedir();
+      }
+      if (!defaultDir || !fs.existsSync(defaultDir)) {
+        defaultDir = os.homedir();
+      }
+      const defaultPath = path.join(defaultDir, defaultFilename);
+
       const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
         title: 'Exportar Configuración Completa de MyTerminal Tux Tux',
-        defaultPath: defaultFilename,
+        defaultPath: defaultPath,
         filters: [
           { name: 'Archivos JSON (*.json)', extensions: ['json'] },
           { name: 'Todos los archivos', extensions: ['*'] }

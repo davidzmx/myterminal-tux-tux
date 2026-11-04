@@ -815,6 +815,27 @@ class TuxTerminalApp {
         } else if (e.key === 'Q' || e.key === 'q') {
           e.preventDefault();
           this.requestExitApp();
+        } else if (e.key === 'V' || e.key === 'v') {
+          e.preventDefault();
+          if (this.activeTerminalId) this.pasteToTerminal(this.activeTerminalId);
+        } else if (e.key === 'C' || e.key === 'c') {
+          e.preventDefault();
+          if (this.activeTerminalId) this.copyTerminalSelection(this.activeTerminalId);
+        }
+      }
+    });
+
+    // Ensure active terminal retains focus on paste
+    document.addEventListener('paste', () => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        (activeEl.tagName === 'TEXTAREA' && !activeEl.classList.contains('xterm-helper-textarea'))
+      );
+      if (!isInput && this.activeTerminalId) {
+        const inst = this.terminals.get(this.activeTerminalId);
+        if (inst) {
+          this.focusTerminal(inst);
         }
       }
     });
@@ -3514,6 +3535,40 @@ class TuxTerminalApp {
     term.open(bodyEl);
     if (fitAddon) fitAddon.fit();
 
+    // Key event handler for standard terminal shortcuts (Ctrl+Shift+C / Ctrl+Shift+V / Shift+Insert)
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type === 'keydown') {
+        if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
+          const sel = term.getSelection();
+          if (sel) {
+            navigator.clipboard.writeText(sel);
+            return false;
+          }
+        }
+        if (((event.ctrlKey && event.shiftKey && (event.key === 'V' || event.key === 'v')) ||
+             (event.shiftKey && event.key === 'Insert'))) {
+          this.pasteToTerminal(node.id);
+          return false;
+        }
+      }
+      return true;
+    });
+
+    bodyEl.addEventListener('paste', () => {
+      const inst = this.terminals.get(node.id);
+      if (inst) {
+        this.focusTerminal(inst);
+      }
+    });
+
+    bodyEl.addEventListener('auxclick', (e) => {
+      if (e.button === 1) { // Middle click paste in Linux
+        e.preventDefault();
+        this.setActiveTerminal(node.id);
+        this.pasteToTerminal(node.id);
+      }
+    });
+
     const cols = term.cols || 80;
     const rows = term.rows || 24;
     const chosenShell = node.shellPath || this.config?.defaultShell || null;
@@ -3604,6 +3659,24 @@ class TuxTerminalApp {
     }
   }
 
+  focusTerminal(inst) {
+    if (!inst || !inst.term) return;
+    const term = inst.term;
+    const doFocus = () => {
+      try {
+        term.focus();
+        if (term.textarea) {
+          term.textarea.focus({ preventScroll: true });
+        }
+      } catch (e) {}
+    };
+
+    doFocus();
+    requestAnimationFrame(doFocus);
+    setTimeout(doFocus, 30);
+    setTimeout(doFocus, 100);
+  }
+
   setActiveTerminal(termId) {
     this.activeTerminalId = termId;
 
@@ -3612,7 +3685,8 @@ class TuxTerminalApp {
     });
 
     const activeEl = document.activeElement;
-    const isControlActive = activeEl && (
+    const isXtermTextarea = activeEl && activeEl.classList && activeEl.classList.contains('xterm-helper-textarea');
+    const isControlActive = activeEl && !isXtermTextarea && (
       activeEl.tagName === 'SELECT' || 
       activeEl.tagName === 'INPUT' || 
       activeEl.tagName === 'TEXTAREA' || 
@@ -3622,21 +3696,7 @@ class TuxTerminalApp {
     if (!isControlActive) {
       const termObj = this.terminals.get(termId);
       if (termObj && termObj.term) {
-        termObj.term.focus();
-        setTimeout(() => {
-          if (this.activeTerminalId === termId && termObj.term) {
-            const curActive = document.activeElement;
-            const stillControl = curActive && (
-              curActive.tagName === 'SELECT' || 
-              curActive.tagName === 'INPUT' || 
-              curActive.tagName === 'TEXTAREA' || 
-              (curActive.closest && curActive.closest('.terminal-header'))
-            );
-            if (!stillControl) {
-              termObj.term.focus();
-            }
-          }
-        }, 60);
+        this.focusTerminal(termObj);
       }
     }
 
@@ -3790,28 +3850,48 @@ class TuxTerminalApp {
   }
 
   copyTerminalSelection(termId) {
-    const inst = this.terminals.get(termId);
+    const targetId = termId || this.activeTerminalId;
+    if (!targetId) return;
+    const inst = this.terminals.get(targetId);
     if (inst && inst.term) {
       const selection = inst.term.getSelection();
       if (selection) {
         navigator.clipboard.writeText(selection);
       }
+      this.focusTerminal(inst);
     }
   }
 
   async pasteToTerminal(termId) {
+    const targetId = termId || this.activeTerminalId;
+    if (!targetId) return;
+    const inst = this.terminals.get(targetId);
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        window.api.writeTerminal(termId, text);
+        window.api.writeTerminal(targetId, text);
       }
     } catch (err) {
       console.error('Clipboard paste failed:', err);
+    } finally {
+      if (inst && inst.term) {
+        this.activeTerminalId = targetId;
+        document.querySelectorAll('.terminal-pane').forEach((p) => {
+          p.classList.toggle('active-pane', p.getAttribute('data-term-id') === targetId);
+        });
+        this.focusTerminal(inst);
+      }
     }
   }
 
   clearTerminal(termId) {
-    window.api.writeTerminal(termId, 'clear\r');
+    const targetId = termId || this.activeTerminalId;
+    if (!targetId) return;
+    window.api.writeTerminal(targetId, 'clear\r');
+    const inst = this.terminals.get(targetId);
+    if (inst && inst.term) {
+      this.focusTerminal(inst);
+    }
   }
 
   // ================= SSH PROFILES & PASSWORD AUTO-INJECTION =================
