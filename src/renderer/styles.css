@@ -180,46 +180,30 @@ body, html {
   font-weight: 500;
 }
 
-/* Tab connected to SSH */
-.tab-item.tab-ssh {
-  background: var(--ssh-active-color, #b91c1c) !important;
-  color: #ffffff !important;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.6) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
-  opacity: 0.9;
-}
-
-.tab-item.tab-ssh:hover {
-  opacity: 1;
-  filter: brightness(1.15);
-  color: #ffffff !important;
-}
-
-.tab-item.tab-ssh.active {
-  background: var(--ssh-active-color, #b91c1c) !important;
-  color: #ffffff !important;
-  border-bottom: 3px solid #ffffff !important;
-  font-weight: 600;
-  opacity: 1;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
-}
-
-body.theme-light .tab-item.tab-ssh {
-  background: var(--ssh-active-color, #b91c1c) !important;
-  color: #ffffff !important;
-  border-bottom: 2px solid rgba(0, 0, 0, 0.3) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
-}
-
-body.theme-light .tab-item.tab-ssh.active {
-  background: var(--ssh-active-color, #b91c1c) !important;
-  color: #ffffff !important;
-  border-bottom: 3px solid #ffffff !important;
-  font-weight: 600;
-}
-
 .tab-title {
   font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab-rename-input {
+  background: var(--input-bg, #0e0f12);
+  color: var(--text-main, #f8fafc);
+  border: 1px solid var(--accent-cyan, #06b6d4);
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 1px 5px;
+  width: 100px;
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent-cyan);
+}
+
+body.theme-light .tab-rename-input {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
 }
 
 .tab-close-btn {
@@ -417,6 +401,15 @@ body.theme-light .tab-item.tab-ssh.active {
   cursor: pointer;
   outline: none;
   height: 24px;
+  position: relative;
+  z-index: 5;
+  pointer-events: auto !important;
+}
+
+.tb-shell-select option {
+  background-color: var(--bg-panel, #1e2029);
+  color: var(--text-main, #f8fafc);
+  padding: 4px;
 }
 
 .tb-shell-select:hover {
@@ -1644,6 +1637,7 @@ body.theme-light .git-files-btn-link:hover {
   text-align: center;
   min-width: 24px;
   flex-shrink: 0;
+  cursor: help;
 }
 
 .git-status-badge.badge-modified {

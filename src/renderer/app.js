@@ -37,6 +37,8 @@ class TuxTerminalApp {
     this.statusBarActiveTerm = document.getElementById('active-term-info');
     this.contextMenu = document.getElementById('context-menu');
     this.ctxSshSubmenu = document.getElementById('ctx-ssh-submenu');
+    this.tabContextMenu = document.getElementById('tab-context-menu');
+    this.contextTargetTabId = null;
 
     // Theme Toggle
     this.btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -528,6 +530,9 @@ class TuxTerminalApp {
       if (!this.contextMenu.contains(e.target)) {
         this.hideContextMenu();
       }
+      if (this.tabContextMenu && !this.tabContextMenu.contains(e.target)) {
+        this.hideTabContextMenu();
+      }
       if (!e.target.closest('.ssh-select-wrapper')) {
         document.querySelectorAll('.ssh-dropdown-menu.show').forEach((m) => m.classList.remove('show'));
       }
@@ -538,6 +543,31 @@ class TuxTerminalApp {
         document.querySelectorAll('.tb-git-overflow-menu.show').forEach((m) => m.classList.remove('show'));
       }
     });
+
+    if (this.tabContextMenu) {
+      this.tabContextMenu.addEventListener('click', (e) => {
+        const item = e.target.closest('.menu-item');
+        if (!item) return;
+
+        const action = item.getAttribute('data-tab-action');
+        const tabId = this.contextTargetTabId || this.activeTabId;
+
+        this.hideTabContextMenu();
+        if (!tabId && action !== 'new-tab') return;
+
+        switch (action) {
+          case 'rename':
+            this.startRenamingTab(tabId);
+            break;
+          case 'new-tab':
+            this.createTab();
+            break;
+          case 'close-tab':
+            this.closeTab(tabId);
+            break;
+        }
+      });
+    }
 
     this.contextMenu.addEventListener('click', (e) => {
       const item = e.target.closest('.menu-item');
@@ -890,23 +920,18 @@ class TuxTerminalApp {
   renderTabsNav() {
     this.tabsListEl.innerHTML = '';
     this.tabs.forEach((tab) => {
-      const inSsh = this.isTabInSsh(tab.id);
       const tabEl = document.createElement('div');
-      tabEl.className = `tab-item ${tab.id === this.activeTabId ? 'active' : ''} ${inSsh ? 'tab-ssh' : ''}`;
+      tabEl.className = `tab-item ${tab.id === this.activeTabId ? 'active' : ''}`;
       tabEl.setAttribute('data-tab-id', tab.id);
 
       const titleEl = document.createElement('span');
       titleEl.className = 'tab-title';
-      titleEl.textContent = (inSsh ? '🔑 ' : '') + tab.title;
+      titleEl.textContent = tab.title;
+      titleEl.title = 'Doble click o click derecho para renombrar pestaña';
 
       titleEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        const newName = prompt('Renombrar pestaña:', tab.title);
-        if (newName && newName.trim()) {
-          tab.title = newName.trim();
-          titleEl.textContent = (this.isTabInSsh(tab.id) ? '🔑 ' : '') + tab.title;
-          this.updateStatusBar();
-        }
+        this.startRenamingTab(tab.id);
       });
 
       const closeBtn = document.createElement('button');
@@ -925,8 +950,82 @@ class TuxTerminalApp {
         this.switchTab(tab.id);
       });
 
+      tabEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showTabContextMenu(e.clientX, e.clientY, tab.id);
+      });
+
       this.tabsListEl.appendChild(tabEl);
     });
+  }
+
+  startRenamingTab(tabId) {
+    const tab = this.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    const tabEl = document.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+    if (!tabEl) return;
+
+    const titleEl = tabEl.querySelector('.tab-title');
+    if (!titleEl) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tab-rename-input';
+    input.value = tab.title;
+
+    let finished = false;
+    const finishRename = () => {
+      if (finished) return;
+      finished = true;
+      const newName = input.value.trim();
+      if (newName) {
+        tab.title = newName;
+      }
+      this.renderTabsNav();
+      this.updateStatusBar();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        finishRename();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        finished = true;
+        this.renderTabsNav();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      finishRename();
+    });
+
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('dblclick', (e) => e.stopPropagation());
+
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+  }
+
+  showTabContextMenu(x, y, tabId) {
+    this.contextTargetTabId = tabId;
+    if (!this.tabContextMenu) return;
+
+    this.tabContextMenu.style.left = `${Math.min(window.innerWidth - 180, x)}px`;
+    this.tabContextMenu.style.top = `${Math.min(window.innerHeight - 150, y)}px`;
+    this.tabContextMenu.classList.remove('hidden');
+  }
+
+  hideTabContextMenu() {
+    if (this.tabContextMenu) {
+      this.tabContextMenu.classList.add('hidden');
+    }
+    this.contextTargetTabId = null;
   }
 
   // ================= WORKSPACE SPLITS & TREE =================
@@ -1044,6 +1143,10 @@ class TuxTerminalApp {
     shellSelect.className = 'tb-shell-select';
     shellSelect.id = `shell-select-${node.id}`;
     this.populateShellSelect(shellSelect, node.id);
+
+    shellSelect.addEventListener('pointerdown', (e) => e.stopPropagation());
+    shellSelect.addEventListener('mousedown', (e) => e.stopPropagation());
+    shellSelect.addEventListener('click', (e) => e.stopPropagation());
 
     shellSelect.addEventListener('change', async (e) => {
       const chosenPath = e.target.value;
@@ -1231,7 +1334,19 @@ class TuxTerminalApp {
     pane.appendChild(header);
     pane.appendChild(body);
 
-    pane.addEventListener('pointerdown', () => {
+    header.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('select, button, input, textarea, a, .tb-git-overflow-menu, .ssh-dropdown-menu, .tb-git-dropdown')) {
+        this.activeTerminalId = node.id;
+        document.querySelectorAll('.terminal-pane').forEach((p) => {
+          p.classList.toggle('active-pane', p.getAttribute('data-term-id') === node.id);
+        });
+        this.updateStatusBar();
+        return;
+      }
+      this.setActiveTerminal(node.id);
+    });
+
+    body.addEventListener('pointerdown', () => {
       this.setActiveTerminal(node.id);
     });
 
@@ -1539,6 +1654,46 @@ class TuxTerminalApp {
     this.updateGitCommitPreview();
   }
 
+  createGitStatusBadge(code, isStaged = false) {
+    const badge = document.createElement('span');
+    badge.className = 'git-status-badge';
+    const c = (code || '').trim();
+    badge.textContent = c;
+
+    if (c === '??') {
+      badge.classList.add('badge-untracked');
+      badge.title = '[??] Sin seguimiento (Untracked): Archivo nuevo aún no rastreado por Git';
+    } else if (c === 'A') {
+      badge.classList.add('badge-added');
+      badge.title = '[A] Agregado (Added): Archivo nuevo preparado en el área de preparación (staged)';
+    } else if (c === 'M') {
+      badge.classList.add('badge-modified');
+      badge.title = isStaged
+        ? '[M] Modificado (Staged): Cambios preparados listos para confirmar'
+        : '[M] Modificado (Modified): Archivo con cambios en el directorio de trabajo';
+    } else if (c === 'D') {
+      badge.classList.add('badge-deleted');
+      badge.title = isStaged
+        ? '[D] Eliminado (Staged): Archivo borrado preparado para confirmar'
+        : '[D] Eliminado (Deleted): Archivo borrado en el directorio de trabajo';
+    } else if (c === 'R') {
+      badge.classList.add('badge-renamed');
+      badge.title = '[R] Renombrado (Renamed): Archivo renombrado o movido';
+    } else if (c === 'C') {
+      badge.classList.add('badge-renamed');
+      badge.title = '[C] Copiado (Copied): Archivo copiado';
+    } else {
+      badge.classList.add('badge-modified');
+      badge.title = `[${c}] Estado Git: ${c}`;
+    }
+
+    if (isStaged) {
+      badge.classList.add('badge-staged');
+    }
+
+    return badge;
+  }
+
   renderGitCommitFilesList(files) {
     const filesList = document.getElementById('git-commit-files-list');
     const stagedBanner = document.getElementById('git-commit-staged-banner');
@@ -1579,21 +1734,7 @@ class TuxTerminalApp {
       chk.checked = stagedFiles.length === 0;
       chk.addEventListener('change', () => this.updateGitCommitPreview());
 
-      const badge = document.createElement('span');
-      badge.className = 'git-status-badge';
-      if (file.isUntracked) {
-        badge.classList.add('badge-untracked');
-        badge.textContent = '??';
-      } else if (file.y === 'M') {
-        badge.classList.add('badge-modified');
-        badge.textContent = 'M';
-      } else if (file.y === 'D') {
-        badge.classList.add('badge-deleted');
-        badge.textContent = 'D';
-      } else {
-        badge.classList.add('badge-modified');
-        badge.textContent = file.y || 'M';
-      }
+      const badge = this.createGitStatusBadge(file.isUntracked ? '??' : (file.y || 'M'), false);
 
       const pathSpan = document.createElement('span');
       pathSpan.className = 'git-file-path';
@@ -1755,21 +1896,7 @@ class TuxTerminalApp {
       chk.checked = true;
       chk.addEventListener('change', () => this.updateGitAddPreview());
 
-      const badge = document.createElement('span');
-      badge.className = 'git-status-badge';
-      if (file.isUntracked) {
-        badge.classList.add('badge-untracked');
-        badge.textContent = '??';
-      } else if (file.y === 'M') {
-        badge.classList.add('badge-modified');
-        badge.textContent = 'M';
-      } else if (file.y === 'D') {
-        badge.classList.add('badge-deleted');
-        badge.textContent = 'D';
-      } else {
-        badge.classList.add('badge-modified');
-        badge.textContent = file.y || 'M';
-      }
+      const badge = this.createGitStatusBadge(file.isUntracked ? '??' : (file.y || 'M'), false);
 
       const pathSpan = document.createElement('span');
       pathSpan.className = 'git-file-path';
@@ -1897,13 +2024,7 @@ class TuxTerminalApp {
       chk.checked = true;
       chk.addEventListener('change', () => this.updateGitUnstagePreview());
 
-      const badge = document.createElement('span');
-      badge.className = 'git-status-badge badge-staged';
-      badge.textContent = file.x || 'STG';
-      if (file.x === 'A') badge.classList.add('badge-added');
-      else if (file.x === 'M') badge.classList.add('badge-modified');
-      else if (file.x === 'D') badge.classList.add('badge-deleted');
-      else if (file.x === 'R') badge.classList.add('badge-renamed');
+      const badge = this.createGitStatusBadge(file.x || 'M', true);
 
       const pathSpan = document.createElement('span');
       pathSpan.className = 'git-file-path';
@@ -2242,14 +2363,33 @@ class TuxTerminalApp {
       p.classList.toggle('active-pane', p.getAttribute('data-term-id') === termId);
     });
 
-    const termObj = this.terminals.get(termId);
-    if (termObj && termObj.term) {
-      termObj.term.focus();
-      setTimeout(() => {
-        if (this.activeTerminalId === termId && termObj.term) {
-          termObj.term.focus();
-        }
-      }, 60);
+    const activeEl = document.activeElement;
+    const isControlActive = activeEl && (
+      activeEl.tagName === 'SELECT' || 
+      activeEl.tagName === 'INPUT' || 
+      activeEl.tagName === 'TEXTAREA' || 
+      (activeEl.closest && activeEl.closest('.terminal-header'))
+    );
+
+    if (!isControlActive) {
+      const termObj = this.terminals.get(termId);
+      if (termObj && termObj.term) {
+        termObj.term.focus();
+        setTimeout(() => {
+          if (this.activeTerminalId === termId && termObj.term) {
+            const curActive = document.activeElement;
+            const stillControl = curActive && (
+              curActive.tagName === 'SELECT' || 
+              curActive.tagName === 'INPUT' || 
+              curActive.tagName === 'TEXTAREA' || 
+              (curActive.closest && curActive.closest('.terminal-header'))
+            );
+            if (!stillControl) {
+              termObj.term.focus();
+            }
+          }
+        }, 60);
+      }
     }
 
     this.updateStatusBar();
