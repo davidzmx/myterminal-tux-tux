@@ -12,6 +12,12 @@ function getWebLinksAddonClass() {
   return (window.WebLinksAddon && window.WebLinksAddon.WebLinksAddon) || window.WebLinksAddon;
 }
 
+const PRESET_GROUP_ICONS = [
+  '⚡', '💻', '🌿', '🐳', '☸️', '🚀', '📦', '🔧', '⚙️', 
+  '📜', '🐍', '☕', '🦀', '🌐', '📊', '🧪', '🔥', '🛡️', 
+  '💾', '🤖', '🐧', '📋', '📁', '⭐', '🎯', '🔌', '📡'
+];
+
 class TuxTerminalApp {
   constructor() {
     this.config = null;
@@ -102,6 +108,7 @@ class TuxTerminalApp {
     this.editGroupIdInput = document.getElementById('edit-group-id');
     this.editGroupNameInput = document.getElementById('edit-group-name');
     this.editGroupIconInput = document.getElementById('edit-group-icon');
+    this.iconPickerPalette = document.getElementById('icon-picker-palette');
     this.editGroupModalTitle = document.getElementById('edit-group-modal-title');
     this.cfgButtonGroupSelect = document.getElementById('cfg-button-group-select');
     this.btnAddGroup = document.getElementById('btn-add-group');
@@ -416,6 +423,8 @@ class TuxTerminalApp {
         await this.handleSaveGroupSubmit();
       });
     }
+
+    this.initIconPicker();
 
     // Single Action form submit
     this.editGitActionForm.addEventListener('submit', async (e) => {
@@ -1278,11 +1287,48 @@ class TuxTerminalApp {
     });
   }
 
+  initIconPicker() {
+    if (!this.iconPickerPalette) return;
+    this.iconPickerPalette.innerHTML = '';
+    PRESET_GROUP_ICONS.forEach((ic) => {
+      const chip = document.createElement('div');
+      chip.className = 'icon-picker-item';
+      chip.textContent = ic;
+      chip.title = `Seleccionar ${ic}`;
+      chip.addEventListener('click', () => {
+        if (this.editGroupIconInput) {
+          this.editGroupIconInput.value = ic;
+          this.updateIconPickerSelection(ic);
+        }
+      });
+      this.iconPickerPalette.appendChild(chip);
+    });
+
+    if (this.editGroupIconInput) {
+      this.editGroupIconInput.addEventListener('input', () => {
+        this.updateIconPickerSelection(this.editGroupIconInput.value.trim());
+      });
+    }
+  }
+
+  updateIconPickerSelection(selectedIcon) {
+    if (!this.iconPickerPalette) return;
+    const items = this.iconPickerPalette.querySelectorAll('.icon-picker-item');
+    items.forEach((item) => {
+      if (item.textContent === selectedIcon) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  }
+
   openCreateGroupModal() {
     this.editGroupModalTitle.textContent = 'Nuevo Grupo de Botones';
     this.editGroupIdInput.value = '';
     this.editGroupNameInput.value = '';
     this.editGroupIconInput.value = '⚡';
+    this.updateIconPickerSelection('⚡');
     this.openModal(this.modalEditButtonGroup);
     this.editGroupNameInput.focus();
   }
@@ -1293,7 +1339,9 @@ class TuxTerminalApp {
     this.editGroupModalTitle.textContent = `Editar Grupo: ${group.name}`;
     this.editGroupIdInput.value = group.id;
     this.editGroupNameInput.value = group.name;
-    this.editGroupIconInput.value = group.icon || '⚡';
+    const icon = group.icon || '⚡';
+    this.editGroupIconInput.value = icon;
+    this.updateIconPickerSelection(icon);
     this.openModal(this.modalEditButtonGroup);
     this.editGroupNameInput.focus();
   }

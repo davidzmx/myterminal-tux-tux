@@ -565,9 +565,14 @@ function registerIpcHandlers() {
   // Export / Import All Configuration (Backup across computers)
   ipcMain.handle('config:export-all', async () => {
     try {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+      const defaultFilename = `myterminal-config-${dateStr}.json`;
+
       const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
         title: 'Exportar Configuración Completa de MyTerminal Tux Tux',
-        defaultPath: 'myterminal-tux-tux-backup.json',
+        defaultPath: defaultFilename,
         filters: [
           { name: 'Archivos JSON (*.json)', extensions: ['json'] },
           { name: 'Todos los archivos', extensions: ['*'] }
@@ -623,6 +628,23 @@ function registerIpcHandlers() {
       }
 
       if (data.config && typeof data.config === 'object') {
+        // Cross-platform sanitization for defaultShell
+        if (data.config.defaultShell) {
+          const available = getAvailableShells();
+          const exists = available.some((s) => s.path === data.config.defaultShell);
+          if (!exists) {
+            // Fallback to host's default shell
+            let defaultShellPath = available[0]?.path || '';
+            if (process.platform === 'win32') {
+              const ps = available.find(s => s.name.includes('PowerShell'));
+              defaultShellPath = ps ? ps.path : (process.env.COMSPEC || 'powershell.exe');
+            } else {
+              const bash = available.find(s => s.path === '/bin/bash' || s.path === '/usr/bin/bash' || s.name.toLowerCase() === 'bash');
+              defaultShellPath = bash ? bash.path : (available[0]?.path || '/bin/bash');
+            }
+            data.config.defaultShell = defaultShellPath;
+          }
+        }
         saveJsonFile('config.json', data.config);
       }
       if (Array.isArray(data.profiles)) {
