@@ -1452,6 +1452,15 @@ class TuxTerminalApp {
     });
   }
 
+  updateTabSshIndicators() {
+    this.tabs.forEach((tab) => {
+      const tabEl = document.querySelector(`.tab-item[data-tab-id="${tab.id}"]`);
+      if (tabEl) {
+        tabEl.classList.toggle('tab-ssh-active', this.isTabInSsh(tab.id));
+      }
+    });
+  }
+
   renderTabsNav() {
     this.tabsListEl.innerHTML = '';
     this.tabs.forEach((tab) => {
@@ -1794,7 +1803,7 @@ class TuxTerminalApp {
     btnFav.title = 'Carpetas Favoritas';
     btnFav.innerHTML = `<svg class="fav-star-icon" width="13" height="13" viewBox="0 0 24 24" fill="#facc15" stroke="#ca8a04" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-    </svg>`;
+    </svg><span class="arrow" style="font-size:9px; opacity:0.7;">▾</span>`;
 
     const favDropdown = document.createElement('div');
     favDropdown.className = 'fav-dropdown-menu';
@@ -1824,14 +1833,8 @@ class TuxTerminalApp {
       <span class="ssh-key-icon">🔑</span>
       <span class="ssh-badge-name" id="ssh-badge-name-${node.id}"></span>
       <span class="ssh-badge-host" id="ssh-badge-host-${node.id}"></span>
-      <button type="button" class="ssh-toggle-git-btn" id="ssh-toggle-git-${node.id}" title="Mostrar u ocultar botones de Git en el servidor remoto">🌿 Git</button>
-      <button type="button" class="ssh-disconnect-btn" id="ssh-disconnect-${node.id}" title="Desconectar y volver a local">✕ Salir</button>
+      <button type="button" class="ssh-disconnect-btn" id="ssh-disconnect-${node.id}" title="Desconectar sesión SSH y volver a la terminal local">✕ Desconectar</button>
     `;
-
-    sshBadge.querySelector('.ssh-toggle-git-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleSshGitActions(node.id);
-    });
 
     sshBadge.querySelector('.ssh-disconnect-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2153,7 +2156,7 @@ class TuxTerminalApp {
     dropdownEl.appendChild(manageItem);
   }
 
-  updateTerminalActionButtons(termId) {
+  getActiveGroupForTerminal(termId) {
     const inst = this.terminals.get(termId);
     const groups = this.config.buttonGroups || [];
     let currentGroupId = (inst && inst.activeGroupId) || this.config.activeButtonGroup || 'group-git';
@@ -2162,6 +2165,12 @@ class TuxTerminalApp {
       group = groups[0];
       if (inst) inst.activeGroupId = group.id;
     }
+    return group;
+  }
+
+  updateTerminalActionButtons(termId) {
+    const inst = this.terminals.get(termId);
+    const group = this.getActiveGroupForTerminal(termId);
     if (!group) return;
 
     // Update group button label
@@ -2332,13 +2341,6 @@ class TuxTerminalApp {
   }
 
   // ================= SSH & GIT TOOLBAR STATUS =================
-  toggleSshGitActions(termId) {
-    const inst = this.terminals.get(termId);
-    if (!inst) return;
-    inst.sshShowGit = !inst.sshShowGit;
-    this.updateToolbarSshStatus(termId);
-  }
-
   updateToolbarSshStatus(termId) {
     const inst = this.terminals.get(termId);
     const sshBadge = document.getElementById(`ssh-badge-${termId}`);
@@ -2349,7 +2351,6 @@ class TuxTerminalApp {
     const userBtn = document.getElementById(`git-user-btn-${termId}`);
     const gitActions = document.getElementById(`git-actions-${termId}`);
     const nonGitBadge = document.getElementById(`non-git-${termId}`);
-    const toggleGitBtn = document.getElementById(`ssh-toggle-git-${termId}`);
     const headerEl = document.getElementById(`header-${termId}`);
 
     if (!sshBadge) return;
@@ -2365,7 +2366,7 @@ class TuxTerminalApp {
       sshBadge.classList.remove('hidden');
       if (headerEl) headerEl.classList.add('header-ssh');
 
-      // Hide local shell select and label while in remote SSH
+      // Hide local shell select, label, and favorites while in remote SSH
       if (termLabel) termLabel.classList.add('hidden');
       if (shellSelect) shellSelect.classList.add('hidden');
       if (favWrapper) favWrapper.classList.add('hidden');
@@ -2375,25 +2376,13 @@ class TuxTerminalApp {
       if (userBtn) userBtn.classList.add('hidden');
       if (nonGitBadge) nonGitBadge.classList.add('hidden');
 
-      // Toggleable actions buttons
-      if (gitActions) {
-        if (inst.sshShowGit) {
-          gitActions.classList.remove('hidden');
-        } else {
-          gitActions.classList.add('hidden');
-        }
-      }
-
-      if (toggleGitBtn) {
-        toggleGitBtn.classList.toggle('active', Boolean(inst.sshShowGit));
-        toggleGitBtn.textContent = inst.sshShowGit ? '🌿 Git ✓' : '🌿 Git';
-        toggleGitBtn.title = inst.sshShowGit ? 'Ocultar botones de comandos' : 'Mostrar botones de comandos en el servidor remoto';
-      }
+      // Keep button actions visible with current group
+      if (gitActions) gitActions.classList.remove('hidden');
     } else {
       sshBadge.classList.add('hidden');
       if (headerEl) headerEl.classList.remove('header-ssh');
 
-      // Restore local shell select and label
+      // Restore local shell select, label, and favorites
       if (termLabel) termLabel.classList.remove('hidden');
       if (shellSelect) shellSelect.classList.remove('hidden');
       if (favWrapper) favWrapper.classList.remove('hidden');
@@ -2403,7 +2392,7 @@ class TuxTerminalApp {
 
     this.updateTerminalActionButtons(termId);
     setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
-    this.renderTabsNav();
+    this.updateTabSshIndicators();
     this.updateStatusBar();
   }
 
@@ -2427,22 +2416,45 @@ class TuxTerminalApp {
   async refreshGitInfo(termId) {
     try {
       const inst = this.terminals.get(termId);
-      if (inst && inst.sshSession) {
-        this.updateToolbarSshStatus(termId);
-        return;
-      }
+      if (!inst || inst.sshSession) return;
 
       const gitInfo = await window.api.getGitInfo(termId);
-      if (inst) inst.gitInfo = gitInfo;
+      const prevInfo = inst.gitInfo;
+      inst.gitInfo = gitInfo;
 
-      this.updateTerminalActionButtons(termId);
+      const isRepo = Boolean(gitInfo && gitInfo.isRepo);
+      const wasRepo = Boolean(prevInfo && prevInfo.isRepo);
+      const branchChanged = !prevInfo || prevInfo.branch !== gitInfo.branch;
+      const userChanged = !prevInfo || prevInfo.userName !== gitInfo.userName;
+
+      const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
+      const userBtn = document.getElementById(`git-user-btn-${termId}`);
+      const nonGitBadge = document.getElementById(`non-git-${termId}`);
+
+      if (isRepo !== wasRepo) {
+        if (branchWrapper) branchWrapper.classList.toggle('hidden', !isRepo);
+        if (userBtn) userBtn.classList.toggle('hidden', !isRepo);
+        const group = this.getActiveGroupForTerminal ? this.getActiveGroupForTerminal(termId) : null;
+        if (nonGitBadge) nonGitBadge.classList.toggle('hidden', isRepo || !group?.isGit);
+        this.updateGitButtonsOverflow(termId);
+      }
+
+      if (isRepo) {
+        if (branchChanged) {
+          const branchNameEl = branchWrapper?.querySelector('.branch-name');
+          if (branchNameEl) branchNameEl.textContent = gitInfo.branch || '...';
+        }
+        if (userChanged) {
+          const userNameEl = userBtn?.querySelector('.user-name');
+          if (userNameEl) userNameEl.textContent = gitInfo.userName || 'Git';
+        }
+      }
     } catch (e) {}
   }
 
   updateAllGitInfo() {
     for (const termId of this.terminals.keys()) {
       this.refreshGitInfo(termId);
-      this.updateGitButtonsOverflow(termId);
     }
   }
 
@@ -2949,10 +2961,15 @@ class TuxTerminalApp {
       return;
     }
 
-    // Step 1: Temporarily unhide all buttons to measure accurate widths
-    actionButtons.forEach((btn) => (btn.style.display = ''));
-    overflowWrapper.classList.remove('hidden');
-    overflowMenu.innerHTML = '';
+    // Cache button natural width when it is measured
+    for (let i = 0; i < actionButtons.length; i++) {
+      const btn = actionButtons[i];
+      if (btn.offsetWidth > 0) {
+        btn._btnNaturalWidth = btn.offsetWidth + 3;
+      } else if (!btn._btnNaturalWidth) {
+        btn._btnNaturalWidth = 70;
+      }
+    }
 
     const rightGroupLeft = rightGroup.getBoundingClientRect().left;
     const gitActionsLeft = gitActions.getBoundingClientRect().left;
@@ -2964,7 +2981,7 @@ class TuxTerminalApp {
 
     for (let i = 0; i < actionButtons.length; i++) {
       const btn = actionButtons[i];
-      const btnWidth = btn.offsetWidth + 3;
+      const btnWidth = btn._btnNaturalWidth || 70;
       if (accumulatedWidth + btnWidth > availableWidth) {
         overflowStartIndex = i;
         break;
@@ -2973,35 +2990,43 @@ class TuxTerminalApp {
     }
 
     if (overflowStartIndex !== -1) {
-      for (let i = overflowStartIndex; i < actionButtons.length; i++) {
+      overflowMenu.innerHTML = '';
+      for (let i = 0; i < actionButtons.length; i++) {
         const btn = actionButtons[i];
-        btn.style.display = 'none';
+        if (i < overflowStartIndex) {
+          btn.style.display = '';
+        } else {
+          btn.style.display = 'none';
 
-        const actData = btn._gitActionData;
-        const item = document.createElement('div');
-        item.className = 'tb-git-overflow-item';
-        item.textContent = btn.textContent;
-        item.title = btn.title;
+          const actData = btn._gitActionData;
+          const item = document.createElement('div');
+          item.className = 'tb-git-overflow-item';
+          item.textContent = btn.textContent;
+          item.title = btn.title;
 
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          overflowMenu.classList.remove('show');
-          btn.click();
-        });
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            overflowMenu.classList.remove('show');
+            btn.click();
+          });
 
-        item.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          overflowMenu.classList.remove('show');
-          if (actData) {
-            this.openEditSingleGitActionModal(actData);
-          }
-        });
+          item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            overflowMenu.classList.remove('show');
+            if (actData) {
+              this.openEditSingleGitActionModal(actData);
+            }
+          });
 
-        overflowMenu.appendChild(item);
+          overflowMenu.appendChild(item);
+        }
       }
       overflowWrapper.classList.remove('hidden');
     } else {
+      for (let i = 0; i < actionButtons.length; i++) {
+        actionButtons[i].style.display = '';
+      }
       overflowWrapper.classList.add('hidden');
     }
   }

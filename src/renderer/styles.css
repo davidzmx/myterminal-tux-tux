@@ -1488,18 +1488,18 @@ body.theme-light .btn-row-order:hover:not(:disabled) {
 }
 
 .fav-select-btn {
-  background-color: #2563eb;
-  border: 1px solid #1d4ed8;
-  color: #ffffff;
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
   height: 24px;
-  width: 26px;
-  padding: 0;
+  padding: 2px 6px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 3px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
 .fav-select-btn svg {
@@ -1507,22 +1507,25 @@ body.theme-light .btn-row-order:hover:not(:disabled) {
 }
 
 .fav-select-btn .fav-star-icon {
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
 
 .fav-select-btn:hover {
-  background-color: #1d4ed8;
-  border-color: #1e40af;
+  background-color: var(--bg-hover);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
 }
 
 body.theme-light .fav-select-btn {
-  background-color: #2563eb;
-  border-color: #1d4ed8;
-  color: #ffffff;
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+  color: #1e293b;
 }
 
 body.theme-light .fav-select-btn:hover {
-  background-color: #1d4ed8;
+  background-color: #f1f5f9;
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 .fav-dropdown-menu {
