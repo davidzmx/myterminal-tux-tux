@@ -84,6 +84,19 @@ class TuxTerminalApp {
     this.btnSshDelete = document.getElementById('btn-ssh-delete');
     this.btnSshConnectActive = document.getElementById('btn-ssh-connect-active');
 
+    // Button Groups & Actions elements
+    this.modalEditButtonGroup = document.getElementById('modal-edit-button-group');
+    this.editButtonGroupForm = document.getElementById('edit-button-group-form');
+    this.editGroupIdInput = document.getElementById('edit-group-id');
+    this.editGroupNameInput = document.getElementById('edit-group-name');
+    this.editGroupIconInput = document.getElementById('edit-group-icon');
+    this.editGroupModalTitle = document.getElementById('edit-group-modal-title');
+    this.cfgButtonGroupSelect = document.getElementById('cfg-button-group-select');
+    this.btnAddGroup = document.getElementById('btn-add-group');
+    this.btnEditGroup = document.getElementById('btn-edit-group');
+    this.btnDeleteGroup = document.getElementById('btn-delete-group');
+    this.cfgGroupActionsTitle = document.getElementById('cfg-group-actions-title');
+
     // Git Form
     this.gitUserForm = document.getElementById('git-user-form');
   }
@@ -91,13 +104,17 @@ class TuxTerminalApp {
   async loadInitialData() {
     try {
       this.config = await window.api.getConfig();
-      if (this.config && this.config.gitActions) {
+      if (!this.config.buttonGroups || !Array.isArray(this.config.buttonGroups) || this.config.buttonGroups.length === 0) {
+        this.config.buttonGroups = await window.api.resetButtonGroups();
+      }
+      if (this.config.gitActions) {
         this.config.gitActions = this.config.gitActions.filter(a => a.action !== 'user-git' && a.label !== 'user Git');
       }
     } catch (e) {
       console.error('Error loading config:', e);
-      this.config = { theme: 'dark', defaultDir: 'cwd', gitActions: [] };
+      this.config = { theme: 'dark', defaultDir: 'cwd', buttonGroups: [] };
     }
+    this.selectedConfigGroupId = this.config.activeButtonGroup || this.config.buttonGroups?.[0]?.id || 'group-git';
 
     try {
       this.availableShells = await window.api.getAvailableShells();
@@ -123,6 +140,25 @@ class TuxTerminalApp {
     // Polling git info every 2.5s for terminals
     setInterval(() => {
       this.updateAllGitInfo();
+    }, 2500);
+
+    // Polling SSH status to automatically restore normal header if disconnected
+    setInterval(async () => {
+      for (const [termId, inst] of this.terminals.entries()) {
+        if (inst && inst.sshSession) {
+          try {
+            const status = await window.api.getTerminalSshStatus(termId);
+            if (!status || !status.connected) {
+              inst.sshSession = null;
+              inst.pendingSshSession = null;
+              inst.sshShowGit = false;
+              inst.title = 'Terminal';
+              this.updateToolbarSshStatus(termId);
+              this.updateStatusBar();
+            }
+          } catch (e) {}
+        }
+      }
     }, 2500);
 
     window.addEventListener('resize', () => {
@@ -260,16 +296,47 @@ class TuxTerminalApp {
     });
 
     document.getElementById('btn-reset-git-actions').addEventListener('click', async () => {
-      if (confirm('¿Restaurar todas las acciones y comandos Git predeterminados?')) {
-        await this.resetDefaultGitActions();
-      }
+      await this.resetDefaultGitActions();
     });
 
     document.getElementById('btn-save-git-actions').addEventListener('click', async () => {
       await this.saveGitActionsConfig();
     });
 
-    // Single Git Action form submit
+    // Group select in settings changed
+    if (this.cfgButtonGroupSelect) {
+      this.cfgButtonGroupSelect.addEventListener('change', (e) => {
+        this.selectedConfigGroupId = e.target.value;
+        this.renderGitActionsConfig();
+      });
+    }
+
+    if (this.btnAddGroup) {
+      this.btnAddGroup.addEventListener('click', () => {
+        this.openCreateGroupModal();
+      });
+    }
+
+    if (this.btnEditGroup) {
+      this.btnEditGroup.addEventListener('click', () => {
+        this.openEditGroupModal();
+      });
+    }
+
+    if (this.btnDeleteGroup) {
+      this.btnDeleteGroup.addEventListener('click', () => {
+        this.deleteSelectedGroup();
+      });
+    }
+
+    if (this.editButtonGroupForm) {
+      this.editButtonGroupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await this.handleSaveGroupSubmit();
+      });
+    }
+
+    // Single Action form submit
     this.editGitActionForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const actionId = this.editGitActionIdInput.value;
@@ -281,9 +348,14 @@ class TuxTerminalApp {
         return;
       }
 
+      const group = this.getSelectedConfigGroup();
+      if (!group) return;
+
+      if (!group.actions) group.actions = [];
+
       if (actionId) {
         // Edit existing
-        const action = this.config.gitActions.find((a) => a.id === actionId);
+        const action = group.actions.find((a) => a.id === actionId);
         if (action) {
           action.label = newLabel;
           if (action.action !== 'user-git') {
@@ -292,13 +364,16 @@ class TuxTerminalApp {
         }
       } else {
         // Create new
-        if (!this.config.gitActions) this.config.gitActions = [];
-        this.config.gitActions.push({
+        group.actions.push({
           id: 'act_' + Math.random().toString(36).substring(2, 8),
           label: newLabel,
-          cmd: newCmd || 'git ',
+          cmd: newCmd,
           enabled: true
         });
+      }
+
+      if (group.isGit || group.id === 'group-git') {
+        this.config.gitActions = group.actions;
       }
 
       await window.api.saveConfig(this.config);
@@ -536,6 +611,9 @@ class TuxTerminalApp {
       if (!e.target.closest('.ssh-select-wrapper')) {
         document.querySelectorAll('.ssh-dropdown-menu.show').forEach((m) => m.classList.remove('show'));
       }
+      if (!e.target.closest('.tb-group-select-wrapper')) {
+        document.querySelectorAll('.tb-group-dropdown.show').forEach((m) => m.classList.remove('show'));
+      }
       if (!e.target.closest('.tb-git-branch-wrapper')) {
         document.querySelectorAll('.tb-git-dropdown.show').forEach((m) => m.classList.remove('show'));
       }
@@ -662,6 +740,16 @@ class TuxTerminalApp {
     });
 
     this.renderGitActionsConfig();
+
+    if (tabName) {
+      document.querySelectorAll('.settings-nav-btn').forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-settings-tab') === tabName);
+      });
+      document.querySelectorAll('.settings-tab-pane').forEach((p) => {
+        p.classList.toggle('active', p.id === tabName);
+      });
+    }
+
     this.modalSettings.classList.remove('hidden');
   }
 
@@ -694,9 +782,48 @@ class TuxTerminalApp {
     this.modalSettings.classList.add('hidden');
   }
 
+  populateConfigGroupSelect() {
+    if (!this.cfgButtonGroupSelect) return;
+    this.cfgButtonGroupSelect.innerHTML = '';
+    const groups = this.config.buttonGroups || [];
+    groups.forEach((g) => {
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = `${g.icon || '⚡'} ${g.name}`;
+      if (g.id === this.selectedConfigGroupId) {
+        opt.selected = true;
+      }
+      this.cfgButtonGroupSelect.appendChild(opt);
+    });
+
+    const curGroup = this.getSelectedConfigGroup();
+    if (this.cfgGroupActionsTitle && curGroup) {
+      this.cfgGroupActionsTitle.textContent = `Botones del grupo: ${curGroup.icon || ''} ${curGroup.name}`;
+    }
+  }
+
+  getSelectedConfigGroup() {
+    const groups = this.config.buttonGroups || [];
+    let group = groups.find((g) => g.id === this.selectedConfigGroupId);
+    if (!group && groups.length > 0) {
+      group = groups[0];
+      this.selectedConfigGroupId = group.id;
+    }
+    return group;
+  }
+
   renderGitActionsConfig() {
+    this.populateConfigGroupSelect();
     this.gitActionsListEl.innerHTML = '';
-    const actions = this.config.gitActions || [];
+    const group = this.getSelectedConfigGroup();
+    if (!group) return;
+
+    const actions = group.actions || [];
+
+    if (actions.length === 0) {
+      this.gitActionsListEl.innerHTML = '<div style="padding:15px; text-align:center; color:var(--text-dim); font-size:12px;">Este grupo aún no tiene botones. Haz clic en <b>+ Nueva Acción</b> para agregar uno.</div>';
+      return;
+    }
 
     actions.forEach((act, index) => {
       const row = document.createElement('div');
@@ -721,7 +848,7 @@ class TuxTerminalApp {
       inputCmd.type = 'text';
       inputCmd.className = 'git-action-input-cmd col-cmd';
       inputCmd.value = act.cmd || (act.action === 'user-git' ? '(Abre ventana de usuario Git)' : '');
-      inputCmd.placeholder = 'Comando git exacto (ej. git status)';
+      inputCmd.placeholder = 'Comando a ejecutar (ej. top, git status, docker ps)';
       if (act.action === 'user-git') {
         inputCmd.readOnly = true;
       }
@@ -747,8 +874,12 @@ class TuxTerminalApp {
       btnDel.innerHTML = '🗑️';
       btnDel.title = 'Eliminar acción';
       btnDel.addEventListener('click', () => {
-        this.config.gitActions.splice(index, 1);
+        group.actions.splice(index, 1);
+        if (group.isGit || group.id === 'group-git') {
+          this.config.gitActions = group.actions;
+        }
         this.renderGitActionsConfig();
+        this.refreshAllGitToolbars();
       });
 
       btnsBox.appendChild(btnEdit);
@@ -763,12 +894,85 @@ class TuxTerminalApp {
     });
   }
 
+  openCreateGroupModal() {
+    this.editGroupModalTitle.textContent = 'Nuevo Grupo de Botones';
+    this.editGroupIdInput.value = '';
+    this.editGroupNameInput.value = '';
+    this.editGroupIconInput.value = '⚡';
+    this.modalEditButtonGroup.classList.remove('hidden');
+    this.editGroupNameInput.focus();
+  }
+
+  openEditGroupModal() {
+    const group = this.getSelectedConfigGroup();
+    if (!group) return;
+    this.editGroupModalTitle.textContent = `Editar Grupo: ${group.name}`;
+    this.editGroupIdInput.value = group.id;
+    this.editGroupNameInput.value = group.name;
+    this.editGroupIconInput.value = group.icon || '⚡';
+    this.modalEditButtonGroup.classList.remove('hidden');
+    this.editGroupNameInput.focus();
+  }
+
+  async deleteSelectedGroup() {
+    const group = this.getSelectedConfigGroup();
+    if (!group) return;
+    if (group.id === 'group-git') {
+      alert('El grupo predeterminado de Git no se puede eliminar.');
+      return;
+    }
+    if (confirm(`¿Eliminar el grupo "${group.name}" y todos sus comandos?`)) {
+      this.config.buttonGroups = this.config.buttonGroups.filter((g) => g.id !== group.id);
+      this.selectedConfigGroupId = this.config.buttonGroups[0]?.id || 'group-git';
+      await window.api.saveConfig(this.config);
+      this.renderGitActionsConfig();
+      this.refreshAllGitToolbars();
+    }
+  }
+
+  async handleSaveGroupSubmit() {
+    const groupId = this.editGroupIdInput.value;
+    const name = this.editGroupNameInput.value.trim();
+    const icon = this.editGroupIconInput.value.trim() || '⚡';
+
+    if (!name) {
+      alert('Ingresa un nombre para el grupo.');
+      return;
+    }
+
+    if (!this.config.buttonGroups) this.config.buttonGroups = [];
+
+    if (groupId) {
+      const g = this.config.buttonGroups.find((x) => x.id === groupId);
+      if (g) {
+        g.name = name;
+        g.icon = icon;
+      }
+    } else {
+      const newGroup = {
+        id: 'group_' + Math.random().toString(36).substring(2, 8),
+        name: name,
+        icon: icon,
+        isGit: false,
+        actions: []
+      };
+      this.config.buttonGroups.push(newGroup);
+      this.selectedConfigGroupId = newGroup.id;
+    }
+
+    await window.api.saveConfig(this.config);
+    this.modalEditButtonGroup.classList.add('hidden');
+    this.renderGitActionsConfig();
+    this.refreshAllGitToolbars();
+  }
+
   openCreateGitActionModal() {
+    const group = this.getSelectedConfigGroup();
     this.editGitModalIcon.textContent = '➕';
-    this.editGitModalTitle.textContent = 'Nueva Acción Git';
+    this.editGitModalTitle.textContent = `Nueva Acción (${group?.name || 'Grupo'})`;
     this.editGitActionIdInput.value = '';
     this.editGitActionLabelInput.value = '';
-    this.editGitActionCmdInput.value = 'git ';
+    this.editGitActionCmdInput.value = group?.isGit ? 'git ' : '';
     this.editGitActionCmdInput.readOnly = false;
     this.modalEditGitAction.classList.remove('hidden');
     this.editGitActionLabelInput.focus();
@@ -793,29 +997,28 @@ class TuxTerminalApp {
   }
 
   async resetDefaultGitActions() {
-    const defaults = [
-      { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
-      { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
-      { id: 'act-unstage', label: 'Unstage', cmd: 'git reset', enabled: true },
-      { id: 'act-commit', label: 'Commit', cmd: 'git commit -m "{prompt:Mensaje de commit}"', enabled: true },
-      { id: 'push', label: 'Push', cmd: 'git push', enabled: true },
-      { id: 'pull', label: 'Pull', cmd: 'git pull', enabled: true },
-      { id: 'fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
-      { id: 'diff', label: 'Diff', cmd: 'git diff', enabled: true },
-      { id: 'log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true }
-    ];
-    this.config.gitActions = defaults;
-    await window.api.saveConfig(this.config);
-    this.renderGitActionsConfig();
-    this.refreshAllGitToolbars();
+    if (confirm('¿Restaurar todos los grupos y botones predeterminados (Git, Sistema, Docker, Node)?')) {
+      this.config.buttonGroups = await window.api.resetButtonGroups();
+      const gitGroup = this.config.buttonGroups.find((g) => g.isGit || g.id === 'group-git');
+      if (gitGroup) {
+        this.config.gitActions = gitGroup.actions;
+      }
+      this.selectedConfigGroupId = this.config.buttonGroups[0]?.id || 'group-git';
+      await window.api.saveConfig(this.config);
+      this.renderGitActionsConfig();
+      this.refreshAllGitToolbars();
+    }
   }
 
   async saveGitActionsConfig() {
+    const group = this.getSelectedConfigGroup();
+    if (!group) return;
+
     const rows = this.gitActionsListEl.querySelectorAll('.git-action-config-row');
     const updated = [];
 
     rows.forEach((row, i) => {
-      const orig = this.config.gitActions[i] || {};
+      const orig = (group.actions && group.actions[i]) || {};
       const chk = row.querySelector('.git-action-enable');
       const inputLabel = row.querySelector('.git-action-input-label');
       const inputCmd = row.querySelector('.git-action-input-cmd');
@@ -829,7 +1032,11 @@ class TuxTerminalApp {
       });
     });
 
-    this.config.gitActions = updated;
+    group.actions = updated;
+    if (group.isGit || group.id === 'group-git') {
+      this.config.gitActions = updated;
+    }
+
     await window.api.saveConfig(this.config);
     this.refreshAllGitToolbars();
     this.modalSettings.classList.add('hidden');
@@ -837,10 +1044,7 @@ class TuxTerminalApp {
 
   refreshAllGitToolbars() {
     for (const termId of this.terminals.keys()) {
-      const gitActionsEl = document.getElementById(`git-actions-${termId}`);
-      if (gitActionsEl) {
-        this.renderTerminalGitActions(gitActionsEl, termId);
-      }
+      this.updateTerminalActionButtons(termId);
     }
   }
 
@@ -1322,7 +1526,35 @@ class TuxTerminalApp {
       this.openGitUserModal(node.id);
     });
 
-    // 5. Configurable Git Action Buttons
+    // 4.5 Action Button Group Selector Dropdown
+    const groupSelectWrapper = document.createElement('div');
+    groupSelectWrapper.className = 'tb-group-select-wrapper';
+    groupSelectWrapper.id = `group-select-wrapper-${node.id}`;
+
+    const btnGroup = document.createElement('button');
+    btnGroup.type = 'button';
+    btnGroup.className = 'tb-group-btn';
+    btnGroup.id = `group-btn-${node.id}`;
+    btnGroup.title = 'Cambiar grupo de comandos (Git, Sistema, etc.)';
+    btnGroup.innerHTML = '<span class="group-icon">🌿</span> <span class="group-name">Git</span> <span class="arrow" style="font-size:9px; opacity:0.7;">▾</span>';
+
+    const groupDropdown = document.createElement('div');
+    groupDropdown.className = 'tb-group-dropdown';
+    groupDropdown.id = `group-dropdown-${node.id}`;
+
+    btnGroup.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.tb-group-dropdown.show').forEach((m) => {
+        if (m !== groupDropdown) m.classList.remove('show');
+      });
+      this.populateGroupDropdown(groupDropdown, node.id);
+      groupDropdown.classList.toggle('show');
+    });
+
+    groupSelectWrapper.appendChild(btnGroup);
+    groupSelectWrapper.appendChild(groupDropdown);
+
+    // 5. Configurable Action Buttons
     const gitActions = document.createElement('div');
     gitActions.className = 'tb-git-actions';
     gitActions.id = `git-actions-${node.id}`;
@@ -1338,7 +1570,7 @@ class TuxTerminalApp {
     btnOverflow.className = 'tb-git-overflow-btn';
     btnOverflow.id = `git-overflow-btn-${node.id}`;
     btnOverflow.innerHTML = '&raquo;';
-    btnOverflow.title = 'Más acciones Git';
+    btnOverflow.title = 'Más acciones';
 
     const overflowMenu = document.createElement('div');
     overflowMenu.className = 'tb-git-overflow-menu';
@@ -1364,6 +1596,7 @@ class TuxTerminalApp {
     leftGroup.appendChild(termLabel);
     leftGroup.appendChild(shellSelect);
     leftGroup.appendChild(sshBadge);
+    leftGroup.appendChild(groupSelectWrapper);
     leftGroup.appendChild(gitBranchWrapper);
     leftGroup.appendChild(gitUserBtn);
     leftGroup.appendChild(gitActions);
@@ -1478,9 +1711,101 @@ class TuxTerminalApp {
     return pane;
   }
 
-  renderTerminalGitActions(containerEl, termId) {
+  populateGroupDropdown(dropdownEl, termId) {
+    dropdownEl.innerHTML = '';
+    const inst = this.terminals.get(termId);
+    const groups = this.config.buttonGroups || [];
+    const currentGroupId = (inst && inst.activeGroupId) || this.config.activeButtonGroup || 'group-git';
+
+    groups.forEach((g) => {
+      const item = document.createElement('div');
+      item.className = 'tb-group-dropdown-item';
+      if (g.id === currentGroupId) item.classList.add('active');
+      item.innerHTML = `<span>${g.icon || '⚡'}</span> <span>${g.name}</span>`;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdownEl.classList.remove('show');
+        if (inst) inst.activeGroupId = g.id;
+        this.updateTerminalActionButtons(termId);
+      });
+      dropdownEl.appendChild(item);
+    });
+
+    const divider = document.createElement('div');
+    divider.className = 'tb-group-dropdown-divider';
+    dropdownEl.appendChild(divider);
+
+    const manageItem = document.createElement('div');
+    manageItem.className = 'tb-group-dropdown-item action';
+    manageItem.innerHTML = '⚙️ Configurar grupos...';
+    manageItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownEl.classList.remove('show');
+      this.selectedConfigGroupId = currentGroupId;
+      this.openSettingsModal('tab-git-opts');
+    });
+    dropdownEl.appendChild(manageItem);
+  }
+
+  updateTerminalActionButtons(termId) {
+    const inst = this.terminals.get(termId);
+    const groups = this.config.buttonGroups || [];
+    let currentGroupId = (inst && inst.activeGroupId) || this.config.activeButtonGroup || 'group-git';
+    let group = groups.find((g) => g.id === currentGroupId);
+    if (!group && groups.length > 0) {
+      group = groups[0];
+      if (inst) inst.activeGroupId = group.id;
+    }
+    if (!group) return;
+
+    // Update group button label
+    const btnGroup = document.getElementById(`group-btn-${termId}`);
+    if (btnGroup) {
+      btnGroup.innerHTML = `<span class="group-icon">${group.icon || '⚡'}</span> <span class="group-name">${group.name}</span> <span class="arrow" style="font-size:9px; opacity:0.7;">▾</span>`;
+    }
+
+    const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
+    const userBtn = document.getElementById(`git-user-btn-${termId}`);
+    const gitActions = document.getElementById(`git-actions-${termId}`);
+    const nonGitBadge = document.getElementById(`non-git-${termId}`);
+
+    if (gitActions) {
+      this.renderTerminalGitActions(gitActions, termId, group);
+    }
+
+    if (group.isGit) {
+      if (inst && inst.sshSession) {
+        if (branchWrapper) branchWrapper.classList.add('hidden');
+        if (userBtn) userBtn.classList.add('hidden');
+        if (nonGitBadge) nonGitBadge.classList.add('hidden');
+      } else {
+        const isRepo = inst && inst.gitInfo && inst.gitInfo.isRepo;
+        if (branchWrapper) branchWrapper.classList.toggle('hidden', !isRepo);
+        if (userBtn) userBtn.classList.toggle('hidden', !isRepo);
+        if (nonGitBadge) nonGitBadge.classList.toggle('hidden', Boolean(isRepo));
+      }
+    } else {
+      // Non-Git group (Sistema, Docker, etc.) -> Works anywhere (local or remote)!
+      if (branchWrapper) branchWrapper.classList.add('hidden');
+      if (userBtn) userBtn.classList.add('hidden');
+      if (nonGitBadge) nonGitBadge.classList.add('hidden');
+      if (gitActions) gitActions.classList.remove('hidden');
+    }
+
+    setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
+  }
+
+  renderTerminalGitActions(containerEl, termId, group) {
     containerEl.innerHTML = '';
-    const actions = (this.config && this.config.gitActions) || [];
+    const inst = this.terminals.get(termId);
+    const groups = this.config.buttonGroups || [];
+    if (!group) {
+      const currentGroupId = (inst && inst.activeGroupId) || this.config.activeButtonGroup || 'group-git';
+      group = groups.find((g) => g.id === currentGroupId) || groups[0];
+    }
+    if (!group) return;
+
+    const actions = group.actions || [];
 
     actions.forEach((act) => {
       if (act.enabled === false) return;
@@ -1495,27 +1820,29 @@ class TuxTerminalApp {
         e.stopPropagation();
         this.setActiveTerminal(termId);
 
-        if (act.action === 'user-git') {
-          this.openGitUserModal(termId);
-          return;
-        }
+        if (group.isGit) {
+          if (act.action === 'user-git') {
+            this.openGitUserModal(termId);
+            return;
+          }
 
-        // Dedicated interactive modal for commit
-        if (act.action === 'commit' || act.id === 'act-commit' || act.label.toLowerCase() === 'commit' || (act.cmd && act.cmd.trim().startsWith('git commit'))) {
-          this.openGitCommitModal(termId);
-          return;
-        }
+          // Dedicated interactive modal for commit
+          if (act.action === 'commit' || act.id === 'act-commit' || act.label.toLowerCase() === 'commit' || (act.cmd && act.cmd.trim().startsWith('git commit'))) {
+            this.openGitCommitModal(termId);
+            return;
+          }
 
-        // Dedicated interactive modal for add
-        if (act.action === 'add' || act.id === 'act-add' || act.label.toLowerCase() === 'add' || (act.cmd && act.cmd.trim().startsWith('git add'))) {
-          this.openGitAddModal(termId);
-          return;
-        }
+          // Dedicated interactive modal for add
+          if (act.action === 'add' || act.id === 'act-add' || act.label.toLowerCase() === 'add' || (act.cmd && act.cmd.trim().startsWith('git add'))) {
+            this.openGitAddModal(termId);
+            return;
+          }
 
-        // Dedicated interactive modal for unstage
-        if (act.action === 'unstage' || act.id === 'act-unstage' || act.label.toLowerCase() === 'unstage' || (act.cmd && (act.cmd.trim().startsWith('git reset') || act.cmd.trim().startsWith('git restore --staged')))) {
-          this.openGitUnstageModal(termId);
-          return;
+          // Dedicated interactive modal for unstage
+          if (act.action === 'unstage' || act.id === 'act-unstage' || act.label.toLowerCase() === 'unstage' || (act.cmd && (act.cmd.trim().startsWith('git reset') || act.cmd.trim().startsWith('git restore --staged')))) {
+            this.openGitUnstageModal(termId);
+            return;
+          }
         }
 
         if (act.cmd) {
@@ -1529,7 +1856,9 @@ class TuxTerminalApp {
           }
 
           window.api.writeTerminal(termId, `${command}\r`);
-          setTimeout(() => this.refreshGitInfo(termId), 500);
+          if (group.isGit) {
+            setTimeout(() => this.refreshGitInfo(termId), 500);
+          }
         }
       });
 
@@ -1537,6 +1866,7 @@ class TuxTerminalApp {
       btn.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        this.selectedConfigGroupId = group.id;
         this.openEditSingleGitActionModal(act);
       });
 
@@ -1632,7 +1962,7 @@ class TuxTerminalApp {
       if (userBtn) userBtn.classList.add('hidden');
       if (nonGitBadge) nonGitBadge.classList.add('hidden');
 
-      // Toggleable Git actions buttons
+      // Toggleable actions buttons
       if (gitActions) {
         if (inst.sshShowGit) {
           gitActions.classList.remove('hidden');
@@ -1644,7 +1974,7 @@ class TuxTerminalApp {
       if (toggleGitBtn) {
         toggleGitBtn.classList.toggle('active', Boolean(inst.sshShowGit));
         toggleGitBtn.textContent = inst.sshShowGit ? '🌿 Git ✓' : '🌿 Git';
-        toggleGitBtn.title = inst.sshShowGit ? 'Ocultar botones de Git' : 'Mostrar botones de acciones Git en el servidor remoto';
+        toggleGitBtn.title = inst.sshShowGit ? 'Ocultar botones de comandos' : 'Mostrar botones de comandos en el servidor remoto';
       }
     } else {
       sshBadge.classList.add('hidden');
@@ -1657,19 +1987,25 @@ class TuxTerminalApp {
       this.refreshGitInfo(termId);
     }
 
+    this.updateTerminalActionButtons(termId);
     setTimeout(() => this.updateGitButtonsOverflow(termId), 20);
     this.renderTabsNav();
     this.updateStatusBar();
   }
 
   disconnectSshSession(termId) {
-    window.api.writeTerminal(termId, 'exit\r');
     const inst = this.terminals.get(termId);
     if (inst) {
+      if (inst.sshPollTimer) {
+        clearInterval(inst.sshPollTimer);
+        inst.sshPollTimer = null;
+      }
       inst.sshSession = null;
+      inst.pendingSshSession = null;
       inst.sshShowGit = false;
       inst.title = 'Terminal';
     }
+    window.api.writeTerminal(termId, 'exit\r');
     this.updateToolbarSshStatus(termId);
   }
 
@@ -2414,9 +2750,14 @@ class TuxTerminalApp {
       const unsubData = window.api.onTerminalData(node.id, (data) => {
         term.write(data);
         const curInst = this.terminals.get(node.id);
-        if (curInst && curInst.sshSession) {
-          if (/(Connection to [^\r\n]+ closed|Cerrada la conexi[oó]n a|Connection closed by|logout\r?\n|Killed by signal)/i.test(data)) {
+        if (curInst && (curInst.sshSession || curInst.pendingSshSession)) {
+          if (/(Connection to [^\r\n]+ closed|Cerrada la conexi[oó]n a|Connection closed by|logout\r?\n|Killed by signal|Connection timed out|Connection refused|Could not resolve hostname|Name or service not known|Permission denied \(publickey|Host key verification failed|No route to host|Operation timed out)/i.test(data)) {
+            if (curInst.sshPollTimer) {
+              clearInterval(curInst.sshPollTimer);
+              curInst.sshPollTimer = null;
+            }
             curInst.sshSession = null;
+            curInst.pendingSshSession = null;
             curInst.sshShowGit = false;
             curInst.title = 'Terminal';
             this.updateToolbarSshStatus(node.id);
@@ -2438,7 +2779,10 @@ class TuxTerminalApp {
         title: node.title || 'Terminal',
         gitInfo: null,
         sshSession: null,
+        pendingSshSession: null,
+        sshPollTimer: null,
         sshShowGit: false,
+        activeGroupId: this.config.activeButtonGroup || 'group-git',
         sshPwdListener: null
       };
 
@@ -2610,6 +2954,10 @@ class TuxTerminalApp {
   destroyTerminalInstance(termId) {
     const inst = this.terminals.get(termId);
     if (inst) {
+      if (inst.sshPollTimer) {
+        clearInterval(inst.sshPollTimer);
+        inst.sshPollTimer = null;
+      }
       if (inst.unsubData) inst.unsubData();
       if (inst.unsubExit) inst.unsubExit();
       if (inst.sshPwdListener) inst.sshPwdListener();
@@ -2729,16 +3077,70 @@ class TuxTerminalApp {
       this.setupSshPasswordAutoInjector(termId, secretToSend);
     }
 
-    window.api.writeTerminal(termId, `${sshCmd}\r`);
-
     const inst = this.terminals.get(termId);
     if (inst) {
-      inst.sshSession = profile;
+      if (inst.sshPollTimer) {
+        clearInterval(inst.sshPollTimer);
+        inst.sshPollTimer = null;
+      }
+      inst.pendingSshSession = profile;
+      inst.sshSession = null;
       inst.sshShowGit = false;
-      inst.title = `SSH: ${profile.name} (${profile.host})`;
     }
+
+    // Do NOT set header red or show IP yet (only if connection actually succeeds)
     this.updateToolbarSshStatus(termId);
     this.updateStatusBar();
+
+    window.api.writeTerminal(termId, `${sshCmd}\r`);
+
+    if (inst) {
+      let attempts = 0;
+      const maxAttempts = 60; // 30 seconds
+      inst.sshPollTimer = setInterval(async () => {
+        attempts++;
+        if (!inst.pendingSshSession) {
+          clearInterval(inst.sshPollTimer);
+          inst.sshPollTimer = null;
+          return;
+        }
+
+        try {
+          const status = await window.api.getTerminalSshStatus(termId);
+          if (status && status.connected) {
+            // SSH CONNECTION ESTABLISHED SUCCESSFULLY!
+            clearInterval(inst.sshPollTimer);
+            inst.sshPollTimer = null;
+            inst.sshSession = inst.pendingSshSession;
+            inst.pendingSshSession = null;
+            inst.title = `SSH: ${profile.name} (${profile.host})`;
+            this.updateToolbarSshStatus(termId);
+            this.updateStatusBar();
+            return;
+          }
+
+          // If child ssh process ended/failed/cancelled
+          if (attempts > 3 && status && !status.hasSsh) {
+            clearInterval(inst.sshPollTimer);
+            inst.sshPollTimer = null;
+            inst.pendingSshSession = null;
+            inst.sshSession = null;
+            this.updateToolbarSshStatus(termId);
+            this.updateStatusBar();
+            return;
+          }
+        } catch (e) {}
+
+        if (attempts >= maxAttempts) {
+          clearInterval(inst.sshPollTimer);
+          inst.sshPollTimer = null;
+          inst.pendingSshSession = null;
+          inst.sshSession = null;
+          this.updateToolbarSshStatus(termId);
+          this.updateStatusBar();
+        }
+      }, 500);
+    }
   }
 
   populateSshDropdown(menuEl, targetTermId) {

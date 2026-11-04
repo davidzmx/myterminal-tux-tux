@@ -112,14 +112,14 @@
     </div>
   </div>
 
-  <!-- Modal: Create / Edit Git Action (Dedicated Dialog) -->
+  <!-- Modal: Create / Edit Action (Dedicated Dialog) -->
   <div id="modal-edit-git-action" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-dialog">
       <div class="modal-header">
         <div class="modal-title">
           <span class="modal-icon" id="edit-git-modal-icon">✏️</span> 
-          <span id="edit-git-modal-title">Editar Acción Git</span>
+          <span id="edit-git-modal-title">Editar Acción</span>
         </div>
         <button class="modal-close" data-close-modal="modal-edit-git-action">&times;</button>
       </div>
@@ -128,17 +128,17 @@
           <input type="hidden" id="edit-git-action-id" value="">
           
           <div class="form-group">
-            <label for="edit-git-action-label">Nombre / Etiqueta que se verá en el botón *</label>
-            <input type="text" id="edit-git-action-label" required placeholder="Ej: Status, Push, Stash, Checkout Main...">
-            <small class="form-hint">Este es el texto que aparece en la barra superior de la terminal.</small>
+            <label for="edit-git-action-label">Nombre / Etiqueta del botón *</label>
+            <input type="text" id="edit-git-action-label" required placeholder="Ej: Status, Top, Logs, Docker Up...">
+            <small class="form-hint">Este texto se verá en la barra de herramientas de la terminal.</small>
           </div>
 
           <div class="form-group" id="group-edit-git-cmd">
-            <label for="edit-git-action-cmd">Comando Git a ejecutar en la consola *</label>
-            <input type="text" id="edit-git-action-cmd" required placeholder="Ej: git status, git push origin, git stash...">
+            <label for="edit-git-action-cmd">Comando a ejecutar en la consola *</label>
+            <input type="text" id="edit-git-action-cmd" required placeholder="Ej: git status, top, docker ps, df -h...">
             <small class="form-hint">
-              Puedes usar <code>{prompt:Pregunta}</code> si quieres que pida un texto antes de ejecutarlo.<br>
-              Ejemplo: <code>git commit -m "{prompt:Mensaje de commit}"</code>
+              Puedes usar <code>{prompt:Pregunta}</code> para solicitar datos interactivos al usuario.<br>
+              Ejemplo: <code>git commit -m "{prompt:Mensaje}"</code> o <code>docker logs --tail 50 -f {prompt:Contenedor}</code>
             </small>
           </div>
 
@@ -151,7 +151,40 @@
     </div>
   </div>
 
-  <!-- Modal: General Settings & Git Actions Config -->
+  <!-- Modal: Create / Edit Button Group -->
+  <div id="modal-edit-button-group" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon" id="edit-group-modal-icon">📁</span> 
+          <span id="edit-group-modal-title">Nuevo Grupo de Botones</span>
+        </div>
+        <button class="modal-close" data-close-modal="modal-edit-button-group">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-button-group-form">
+          <input type="hidden" id="edit-group-id" value="">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="edit-group-icon">Icono / Emoji</label>
+              <input type="text" id="edit-group-icon" placeholder="Ej. 💻, 🌿, 🐳" value="⚡" style="text-align:center;">
+            </div>
+            <div class="form-group flex-3">
+              <label for="edit-group-name">Nombre del Grupo *</label>
+              <input type="text" id="edit-group-name" required placeholder="Ej. Sistema, Kubernetes, Logs...">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" data-close-modal="modal-edit-button-group">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-button-group">Guardar Grupo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: General Settings & Command Button Groups Config -->
   <div id="modal-settings" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-dialog modal-lg">
@@ -164,7 +197,7 @@
       <div class="modal-body settings-layout">
         <div class="settings-nav">
           <button class="settings-nav-btn active" data-settings-tab="tab-general-opts">General & Terminal</button>
-          <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Botones de Acciones Git</button>
+          <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Grupos y Botones de Comandos</button>
         </div>
 
         <!-- Section 1: General Options -->
@@ -224,24 +257,41 @@
           </form>
         </div>
 
-        <!-- Section 2: Git Actions Options -->
+        <!-- Section 2: Command Groups & Action Buttons Options -->
         <div id="tab-git-opts" class="settings-tab-pane">
           <div class="git-actions-header">
             <div>
-              <p class="modal-subtitle" style="margin-bottom: 4px;">Edita las etiquetas, comandos y visibilidad de los botones de Git en la barra superior.</p>
-              <small class="form-hint" style="margin-top:0;">Tip: Haz clic en <b>✏️ Editar</b> para modificar cualquier comando o haz clic en <b>+ Nueva Acción</b> para crear uno nuevo.</small>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Configura grupos de botones para Git, Sistema, Docker o cualquier aplicación con comandos de un solo clic.</p>
+              <small class="form-hint" style="margin-top:0;">Selecciona un grupo para editar sus botones o añade nuevos grupos y comandos del sistema.</small>
             </div>
             <div class="git-actions-top-btns">
-              <button id="btn-add-git-action" class="btn btn-sm btn-primary">+ Nueva Acción</button>
-              <button id="btn-reset-git-actions" class="btn btn-sm">↺ Restaurar Predeterminados</button>
+              <button type="button" id="btn-reset-git-actions" class="btn btn-sm">↺ Restaurar Predeterminados</button>
             </div>
+          </div>
+
+          <!-- Group Selector & Manager Bar -->
+          <div class="button-group-manager-bar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-dark); padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <label for="cfg-button-group-select" style="font-weight:600; font-size:12px; margin:0; color:var(--text-main);">Grupo activo:</label>
+              <select id="cfg-button-group-select" class="form-control" style="height:28px; font-weight:600; padding:2px 8px; font-size:12px; border-radius:4px; min-width:170px; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);"></select>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button type="button" id="btn-add-group" class="btn btn-sm">+ Nuevo Grupo</button>
+              <button type="button" id="btn-edit-group" class="btn btn-sm">✏️ Renombrar</button>
+              <button type="button" id="btn-delete-group" class="btn btn-sm btn-danger">🗑️ Eliminar</button>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:12px; font-weight:600; color:var(--text-main);" id="cfg-group-actions-title">Botones del grupo:</span>
+            <button type="button" id="btn-add-git-action" class="btn btn-sm btn-primary">+ Nueva Acción</button>
           </div>
 
           <!-- Table Header -->
           <div class="git-table-header">
             <span class="col-vis">Visible</span>
             <span class="col-name">Nombre Botón</span>
-            <span class="col-cmd">Comando Git a Ejecutar</span>
+            <span class="col-cmd">Comando a Ejecutar</span>
             <span class="col-ops">Acciones</span>
           </div>
 
@@ -249,7 +299,7 @@
 
           <div class="form-actions">
             <span></span>
-            <button id="btn-save-git-actions" class="btn btn-primary">Guardar Cambios de Git</button>
+            <button id="btn-save-git-actions" class="btn btn-primary">Guardar Grupos y Botones</button>
           </div>
         </div>
       </div>

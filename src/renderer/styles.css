@@ -550,6 +550,108 @@ body.theme-light .terminal-header.header-ssh {
   color: #ffffff !important;
 }
 
+/* Action Button Group Selector */
+.tb-group-select-wrapper {
+  position: relative;
+  display: inline-block;
+  z-index: 110;
+}
+
+.tb-group-btn {
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  height: 24px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.tb-group-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+body.theme-light .tb-group-btn {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+body.theme-light .tb-group-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.tb-group-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 3px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  min-width: 170px;
+  z-index: 550;
+  display: none;
+  padding: 4px 0;
+}
+
+.tb-group-dropdown.show {
+  display: block;
+}
+
+.tb-group-dropdown-item {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: background-color 0.1s ease;
+}
+
+.tb-group-dropdown-item:hover {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.tb-group-dropdown-item.active {
+  font-weight: 700;
+  color: var(--accent-cyan, #06b6d4);
+}
+
+.tb-group-dropdown-item.active:hover {
+  color: #ffffff;
+}
+
+.tb-group-dropdown-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+.tb-group-dropdown-item.action {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.tb-group-dropdown-item.action:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
 /* Git Branch Pill Button */
 .tb-git-branch-wrapper {
   position: relative;

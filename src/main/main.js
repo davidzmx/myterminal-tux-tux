@@ -155,6 +155,68 @@ function getDefaultConfig() {
     scrollback: 5000,
     defaultDir: 'cwd',
     sshHeaderColor: '#b91c1c',
+    activeButtonGroup: 'group-git',
+    buttonGroups: [
+      {
+        id: 'group-git',
+        name: 'Git',
+        icon: '🌿',
+        isGit: true,
+        actions: [
+          { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
+          { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
+          { id: 'act-unstage', label: 'Unstage', cmd: 'git reset', enabled: true },
+          { id: 'act-commit', label: 'Commit', cmd: 'git commit -m "{prompt:Mensaje de commit}"', enabled: true },
+          { id: 'act-push', label: 'Push', cmd: 'git push', enabled: true },
+          { id: 'act-pull', label: 'Pull', cmd: 'git pull', enabled: true },
+          { id: 'act-fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
+          { id: 'act-diff', label: 'Diff', cmd: 'git diff', enabled: true },
+          { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true }
+        ]
+      },
+      {
+        id: 'group-sys',
+        name: 'Sistema',
+        icon: '💻',
+        isGit: false,
+        actions: [
+          { id: 'act-sys-top', label: 'Top', cmd: 'top', enabled: true },
+          { id: 'act-sys-df', label: 'Disco (df)', cmd: 'df -h', enabled: true },
+          { id: 'act-sys-free', label: 'RAM (free)', cmd: 'free -h', enabled: true },
+          { id: 'act-sys-ps', label: 'Procesos', cmd: 'ps aux --sort=-%mem | head -n 15', enabled: true },
+          { id: 'act-sys-ports', label: 'Puertos (ss)', cmd: 'ss -tulpn', enabled: true },
+          { id: 'act-sys-uname', label: 'Kernel', cmd: 'uname -a', enabled: true },
+          { id: 'act-sys-uptime', label: 'Uptime', cmd: 'uptime', enabled: true },
+          { id: 'act-sys-ip', label: 'IPs', cmd: 'ip -brief addr', enabled: true }
+        ]
+      },
+      {
+        id: 'group-docker',
+        name: 'Docker',
+        icon: '🐳',
+        isGit: false,
+        actions: [
+          { id: 'act-doc-ps', label: 'ps', cmd: 'docker ps', enabled: true },
+          { id: 'act-doc-images', label: 'images', cmd: 'docker images', enabled: true },
+          { id: 'act-doc-logs', label: 'logs', cmd: 'docker logs --tail 50 -f {prompt:ID o contenedor}', enabled: true },
+          { id: 'act-doc-stats', label: 'stats', cmd: 'docker stats --no-stream', enabled: true },
+          { id: 'act-doc-up', label: 'compose up', cmd: 'docker compose up -d', enabled: true },
+          { id: 'act-doc-down', label: 'compose down', cmd: 'docker compose down', enabled: true }
+        ]
+      },
+      {
+        id: 'group-npm',
+        name: 'Node / NPM',
+        icon: '📦',
+        isGit: false,
+        actions: [
+          { id: 'act-npm-start', label: 'npm start', cmd: 'npm start', enabled: true },
+          { id: 'act-npm-test', label: 'npm test', cmd: 'npm test', enabled: true },
+          { id: 'act-npm-build', label: 'npm run build', cmd: 'npm run build', enabled: true },
+          { id: 'act-npm-outdated', label: 'npm outdated', cmd: 'npm outdated', enabled: true }
+        ]
+      }
+    ],
     gitActions: [
       { id: 'act-status', label: 'Status', cmd: 'git status', enabled: true },
       { id: 'act-add', label: 'Add', cmd: 'git add -A', enabled: true },
@@ -172,7 +234,29 @@ function getDefaultConfig() {
 function getUserConfig() {
   const defaults = getDefaultConfig();
   const saved = loadJsonFile('config.json', {});
-  return { ...defaults, ...saved, gitActions: saved.gitActions || defaults.gitActions };
+  let buttonGroups = saved.buttonGroups;
+
+  if (!buttonGroups || !Array.isArray(buttonGroups) || buttonGroups.length === 0) {
+    buttonGroups = JSON.parse(JSON.stringify(defaults.buttonGroups));
+    if (saved.gitActions && Array.isArray(saved.gitActions) && saved.gitActions.length > 0) {
+      const gitGroup = buttonGroups.find((g) => g.id === 'group-git');
+      if (gitGroup) {
+        gitGroup.actions = saved.gitActions.filter(
+          (a) => a.action !== 'user-git' && a.label !== 'user Git'
+        );
+      }
+    }
+  }
+
+  const gitGroup = buttonGroups.find((g) => g.isGit || g.id === 'group-git');
+  const gitActions = gitGroup ? gitGroup.actions : defaults.gitActions;
+
+  return {
+    ...defaults,
+    ...saved,
+    buttonGroups,
+    gitActions
+  };
 }
 
 function getDefaultShell() {
@@ -382,6 +466,73 @@ function createWindow() {
   });
 }
 
+function getTerminalSshStatus(id) {
+  const item = ptys.get(id);
+  if (!item || !item.process || !item.process.pid) {
+    return { connected: false, hasSsh: false };
+  }
+
+  if (process.platform !== 'linux') {
+    return { connected: true, hasSsh: true };
+  }
+
+  const shellPid = item.process.pid;
+  try {
+    const descendants = [];
+    const queue = [shellPid];
+    while (queue.length > 0) {
+      const parent = queue.shift();
+      try {
+        const out = execSync(`pgrep -P ${parent}`, { encoding: 'utf-8', timeout: 300 }).trim();
+        if (out) {
+          const children = out.split(/\s+/).map(Number).filter(Boolean);
+          for (const c of children) {
+            descendants.push(c);
+            queue.push(c);
+          }
+        }
+      } catch (e) {}
+    }
+
+    let sshPid = null;
+    let cmdline = '';
+
+    for (const p of descendants) {
+      try {
+        const comm = fs.readFileSync(`/proc/${p}/comm`, 'utf-8').trim();
+        if (comm.toLowerCase().includes('ssh')) {
+          sshPid = p;
+          try {
+            cmdline = fs.readFileSync(`/proc/${p}/cmdline`, 'utf-8').replace(/\0/g, ' ').trim();
+          } catch (e) {}
+          break;
+        }
+      } catch (e) {}
+    }
+
+    if (!sshPid) {
+      return { connected: false, hasSsh: false };
+    }
+
+    // Check if the ssh process has an ESTABLISHED TCP connection
+    try {
+      const ssOut = execSync('ss -tnp', { encoding: 'utf-8', timeout: 500 });
+      const lines = ssOut.split('\n');
+      const isEstab = lines.some((line) => line.includes('ESTAB') && line.includes(`pid=${sshPid}`));
+      return {
+        connected: isEstab,
+        hasSsh: true,
+        sshPid,
+        cmdline
+      };
+    } catch (e) {
+      return { connected: false, hasSsh: true, sshPid, cmdline };
+    }
+  } catch (err) {
+    return { connected: false, hasSsh: false };
+  }
+}
+
 function registerIpcHandlers() {
   // Config
   ipcMain.handle('config:get', () => {
@@ -390,6 +541,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('config:save', (event, newConfig) => {
     return saveJsonFile('config.json', newConfig);
+  });
+
+  ipcMain.handle('config:reset-button-groups', () => {
+    return getDefaultConfig().buttonGroups;
   });
 
   // Available Shells
@@ -544,6 +699,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('terminal:get-cwd', (event, { id }) => {
     return getPtyCwd(id);
+  });
+
+  ipcMain.handle('terminal:get-ssh-status', (event, { id }) => {
+    return getTerminalSshStatus(id);
   });
 
   // Git

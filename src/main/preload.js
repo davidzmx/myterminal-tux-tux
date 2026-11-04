@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   // Configuration
   getConfig: () => ipcRenderer.invoke('config:get'),
   saveConfig: (newConfig) => ipcRenderer.invoke('config:save', newConfig),
+  resetButtonGroups: () => ipcRenderer.invoke('config:reset-button-groups'),
 
   // Shells
   getAvailableShells: () => ipcRenderer.invoke('shells:get-available'),
@@ -15,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   resizeTerminal: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
   killTerminal: (id) => ipcRenderer.invoke('terminal:kill', { id }),
   getTerminalCwd: (id) => ipcRenderer.invoke('terminal:get-cwd', { id }),
+  getTerminalSshStatus: (id) => ipcRenderer.invoke('terminal:get-ssh-status', { id }),
 
   // Data listeners
   onTerminalData: (id, callback) => {
