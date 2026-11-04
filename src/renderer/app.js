@@ -766,6 +766,14 @@ class TuxTerminalApp {
     });
   }
 
+  // ================= MODAL MANAGER =================
+  openModal(modal) {
+    if (!modal) return;
+    this.modalZIndexCounter = Math.max(this.modalZIndexCounter || 1000, 1000) + 10;
+    modal.style.zIndex = this.modalZIndexCounter;
+    modal.classList.remove('hidden');
+  }
+
   // ================= SETTINGS MODAL =================
   openSettingsModal(tabName = 'tab-general-opts') {
     this.cfgThemeSelect.value = this.config.theme || 'dark';
@@ -803,7 +811,7 @@ class TuxTerminalApp {
       });
     }
 
-    this.modalSettings.classList.remove('hidden');
+    this.openModal(this.modalSettings);
   }
 
   async saveGeneralConfig() {
@@ -992,7 +1000,7 @@ class TuxTerminalApp {
     this.editGroupIdInput.value = '';
     this.editGroupNameInput.value = '';
     this.editGroupIconInput.value = '⚡';
-    this.modalEditButtonGroup.classList.remove('hidden');
+    this.openModal(this.modalEditButtonGroup);
     this.editGroupNameInput.focus();
   }
 
@@ -1003,7 +1011,7 @@ class TuxTerminalApp {
     this.editGroupIdInput.value = group.id;
     this.editGroupNameInput.value = group.name;
     this.editGroupIconInput.value = group.icon || '⚡';
-    this.modalEditButtonGroup.classList.remove('hidden');
+    this.openModal(this.modalEditButtonGroup);
     this.editGroupNameInput.focus();
   }
 
@@ -1086,7 +1094,7 @@ class TuxTerminalApp {
     this.editGitActionLabelInput.value = '';
     this.editGitActionCmdInput.value = group?.isGit ? 'git ' : '';
     this.editGitActionCmdInput.readOnly = false;
-    this.modalEditGitAction.classList.remove('hidden');
+    this.openModal(this.modalEditGitAction);
     this.editGitActionLabelInput.focus();
   }
 
@@ -1104,7 +1112,7 @@ class TuxTerminalApp {
       this.editGitActionCmdInput.readOnly = false;
     }
 
-    this.modalEditGitAction.classList.remove('hidden');
+    this.openModal(this.modalEditGitAction);
     this.editGitActionLabelInput.focus();
   }
 
@@ -1311,7 +1319,7 @@ class TuxTerminalApp {
       nameInput.value = parts.length > 0 ? parts[parts.length - 1] : 'Mi Carpeta';
     }
 
-    modal.classList.remove('hidden');
+    this.openModal(modal);
     nameInput.focus();
     nameInput.select();
   }
@@ -1784,9 +1792,8 @@ class TuxTerminalApp {
     btnFav.className = 'fav-select-btn';
     btnFav.id = `fav-btn-${node.id}`;
     btnFav.title = 'Carpetas Favoritas';
-    btnFav.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+    btnFav.innerHTML = `<svg class="fav-star-icon" width="13" height="13" viewBox="0 0 24 24" fill="#facc15" stroke="#ca8a04" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
     </svg>`;
 
     const favDropdown = document.createElement('div');
@@ -2461,7 +2468,7 @@ class TuxTerminalApp {
     }
 
     if (this.modalGitCommit) {
-      this.modalGitCommit.classList.remove('hidden');
+      this.openModal(this.modalGitCommit);
     }
     if (msgInput) {
       setTimeout(() => msgInput.focus(), 100);
@@ -2679,7 +2686,7 @@ class TuxTerminalApp {
     }
 
     if (this.modalGitAdd) {
-      this.modalGitAdd.classList.remove('hidden');
+      this.openModal(this.modalGitAdd);
     }
 
     this.gitAddFiles = [];
@@ -2807,7 +2814,7 @@ class TuxTerminalApp {
     }
 
     if (this.modalGitUnstage) {
-      this.modalGitUnstage.classList.remove('hidden');
+      this.openModal(this.modalGitUnstage);
     }
 
     this.gitUnstageFiles = [];
@@ -3055,7 +3062,7 @@ class TuxTerminalApp {
 
     document.getElementById('git-user-name').value = gitInfo?.userName || '';
     document.getElementById('git-user-email').value = gitInfo?.userEmail || '';
-    this.modalGitUser.classList.remove('hidden');
+    this.openModal(this.modalGitUser);
   }
 
   // ================= TERMINAL MOUNTING =================
@@ -3593,13 +3600,13 @@ class TuxTerminalApp {
     document.getElementById('ssh-switch-current-name').textContent = currName;
     document.getElementById('ssh-switch-target-name').textContent = `${targetProfile.name} (${targetProfile.username}@${targetProfile.host})`;
 
-    this.modalSshSwitch.classList.remove('hidden');
+    this.openModal(this.modalSshSwitch);
   }
 
   openSshModal() {
     this.renderSshProfilesList();
     this.clearSshForm();
-    this.modalSsh.classList.remove('hidden');
+    this.openModal(this.modalSsh);
   }
 
   renderSshProfilesList() {
@@ -3716,7 +3723,7 @@ class TuxTerminalApp {
   // ================= GENERAL SESSIONS =================
   async openSessionModal() {
     await this.renderSessionsList();
-    this.modalSession.classList.remove('hidden');
+    this.openModal(this.modalSession);
   }
 
   async renderSessionsList() {
@@ -3866,7 +3873,7 @@ class TuxTerminalApp {
       input.value = tab.title || '';
     }
     await this.renderTabTemplatesList();
-    this.modalTabLayout.classList.remove('hidden');
+    this.openModal(this.modalTabLayout);
   }
 
   async renderTabTemplatesList() {

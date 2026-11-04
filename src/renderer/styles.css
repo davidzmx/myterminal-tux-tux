@@ -1202,14 +1202,30 @@ body.theme-light .ssh-select-btn:hover {
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 900;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-#modal-edit-git-action {
-  z-index: 1200 !important;
+/* Base modals */
+#modal-settings,
+#modal-ssh,
+#modal-session,
+#modal-tab-layout {
+  z-index: 1000;
+}
+
+/* Sub-modals & child dialogs that can open on top of settings or other modals */
+#modal-add-favorite,
+#modal-edit-button-group,
+#modal-edit-git-action,
+#modal-git-user,
+#modal-ssh-switch,
+#modal-git-commit,
+#modal-git-add,
+#modal-git-unstage {
+  z-index: 2500 !important;
 }
 
 .split-icon {
@@ -1488,6 +1504,10 @@ body.theme-light .btn-row-order:hover:not(:disabled) {
 
 .fav-select-btn svg {
   display: block;
+}
+
+.fav-select-btn .fav-star-icon {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
 }
 
 .fav-select-btn:hover {
