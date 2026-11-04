@@ -853,6 +853,19 @@ class TuxTerminalApp {
         await this.handleConfirmExit();
       });
     }
+
+    const btnConfirmCloseTerm = document.getElementById('btn-confirm-close-terminal');
+    if (btnConfirmCloseTerm) {
+      btnConfirmCloseTerm.addEventListener('click', () => {
+        const modal = document.getElementById('modal-confirm-close-terminal');
+        if (modal) modal.classList.add('hidden');
+        if (this.pendingCloseTermId) {
+          const tId = this.pendingCloseTermId;
+          this.pendingCloseTermId = null;
+          this.executeCloseTerminal(tId);
+        }
+      });
+    }
   }
 
   // ================= MODAL MANAGER =================
@@ -2253,12 +2266,16 @@ class TuxTerminalApp {
     groupSelectWrapper.className = 'tb-group-select-wrapper';
     groupSelectWrapper.id = `group-select-wrapper-${node.id}`;
 
+    const groups = this.config?.buttonGroups || [];
+    const defaultNonGitId = this.config?.defaultNonGitGroup || 'group-system';
+    const initialGroup = groups.find((g) => g.id === defaultNonGitId) || groups.find((g) => !g.isGit) || groups[0];
+
     const btnGroup = document.createElement('button');
     btnGroup.type = 'button';
     btnGroup.className = 'tb-group-btn';
     btnGroup.id = `group-btn-${node.id}`;
     btnGroup.title = 'Cambiar grupo de comandos (Git, Sistema, etc.)';
-    btnGroup.innerHTML = '<span class="group-icon">🌿</span> <span class="group-name">Git</span> <span class="arrow" style="font-size:9px; opacity:0.7;">▾</span>';
+    btnGroup.innerHTML = `<span class="group-icon">${initialGroup?.icon || '⚡'}</span> <span class="group-name">${initialGroup?.name || 'Sistema'}</span> <span class="arrow" style="font-size:9px; opacity:0.7;">▾</span>`;
 
     const groupDropdown = document.createElement('div');
     groupDropdown.className = 'tb-group-dropdown';
@@ -2280,7 +2297,7 @@ class TuxTerminalApp {
     const gitActions = document.createElement('div');
     gitActions.className = 'tb-git-actions';
     gitActions.id = `git-actions-${node.id}`;
-    this.renderTerminalGitActions(gitActions, node.id);
+    this.renderTerminalGitActions(gitActions, node.id, initialGroup);
 
     // 5.5 Overflow Button & Dropdown Menu
     const gitOverflowWrapper = document.createElement('div');
@@ -2816,18 +2833,14 @@ class TuxTerminalApp {
         const nonGitGroup = groups.find((g) => g.id === nonGitGroupId) || groups.find((g) => !g.isGit) || groups[0];
 
         if (isRepo) {
-          if ((!prevInfo || !prevInfo.isRepo || inst.activeGroupId === nonGitGroupId) && gitGroup) {
-            if (inst.activeGroupId !== gitGroup.id) {
-              inst.activeGroupId = gitGroup.id;
-              this.updateTerminalActionButtons(termId);
-            }
+          if (gitGroup && inst.activeGroupId !== gitGroup.id) {
+            inst.activeGroupId = gitGroup.id;
+            this.updateTerminalActionButtons(termId);
           }
         } else {
-          if ((!prevInfo || prevInfo.isRepo || (gitGroup && inst.activeGroupId === gitGroup.id)) && nonGitGroup) {
-            if (inst.activeGroupId !== nonGitGroup.id) {
-              inst.activeGroupId = nonGitGroup.id;
-              this.updateTerminalActionButtons(termId);
-            }
+          if (nonGitGroup && inst.activeGroupId !== nonGitGroup.id) {
+            inst.activeGroupId = nonGitGroup.id;
+            this.updateTerminalActionButtons(termId);
           }
         }
       }
@@ -3338,9 +3351,36 @@ class TuxTerminalApp {
     const gitActions = document.getElementById(`git-actions-${termId}`);
     const overflowWrapper = document.getElementById(`git-overflow-wrapper-${termId}`);
     const overflowMenu = document.getElementById(`git-overflow-menu-${termId}`);
-    if (!header || !gitActions || !overflowWrapper || !overflowMenu) return;
+    if (!header) return;
 
-    if (header.clientWidth === 0 || gitActions.classList.contains('hidden')) {
+    const headerWidth = header.clientWidth;
+    if (headerWidth === 0) return;
+
+    const isNarrow = headerWidth < 490;
+    const isVeryNarrow = headerWidth < 390;
+
+    // Adapt compact mode for header items when width is constrained
+    const termLabel = header.querySelector('.tb-label');
+    if (termLabel) {
+      termLabel.style.display = isNarrow ? 'none' : '';
+    }
+
+    const sshHost = header.querySelector('.ssh-badge-host');
+    if (sshHost) {
+      sshHost.style.display = isNarrow ? 'none' : '';
+    }
+
+    const groupBtn = document.getElementById(`group-btn-${termId}`);
+    if (groupBtn) {
+      const groupName = groupBtn.querySelector('.group-name');
+      if (groupName) {
+        groupName.style.display = isVeryNarrow ? 'none' : '';
+      }
+    }
+
+    if (!gitActions || !overflowWrapper || !overflowMenu) return;
+
+    if (gitActions.classList.contains('hidden')) {
       overflowWrapper.classList.add('hidden');
       return;
     }
@@ -3357,10 +3397,10 @@ class TuxTerminalApp {
     // Cache button natural width when it is measured
     for (let i = 0; i < actionButtons.length; i++) {
       const btn = actionButtons[i];
-      if (btn.offsetWidth > 0) {
+      if (btn.offsetWidth > 0 && !btn.style.display) {
         btn._btnNaturalWidth = btn.offsetWidth + 3;
       } else if (!btn._btnNaturalWidth) {
-        btn._btnNaturalWidth = 70;
+        btn._btnNaturalWidth = 65;
       }
     }
 
@@ -3374,7 +3414,7 @@ class TuxTerminalApp {
 
     for (let i = 0; i < actionButtons.length; i++) {
       const btn = actionButtons[i];
-      const btnWidth = btn._btnNaturalWidth || 70;
+      const btnWidth = btn._btnNaturalWidth || 65;
       if (accumulatedWidth + btnWidth > availableWidth) {
         overflowStartIndex = i;
         break;
@@ -3415,7 +3455,12 @@ class TuxTerminalApp {
           overflowMenu.appendChild(item);
         }
       }
-      overflowWrapper.classList.remove('hidden');
+      // Only show overflow toggle button if there is enough room for it
+      if (availableWidth >= 20 || overflowStartIndex > 0) {
+        overflowWrapper.classList.remove('hidden');
+      } else {
+        overflowWrapper.classList.add('hidden');
+      }
     } else {
       for (let i = 0; i < actionButtons.length; i++) {
         actionButtons[i].style.display = '';
@@ -3630,6 +3675,7 @@ class TuxTerminalApp {
       };
 
       this.terminals.set(node.id, termInfo);
+      this.updateTerminalActionButtons(node.id);
 
       if (node.sshSession) {
         setTimeout(() => {
@@ -3761,6 +3807,31 @@ class TuxTerminalApp {
   }
 
   closeTerminal(termId) {
+    const inst = this.terminals.get(termId);
+    if (inst && (inst.sshSession || inst.pendingSshSession)) {
+      const session = inst.sshSession || inst.pendingSshSession;
+      this.pendingCloseTermId = termId;
+      const modal = document.getElementById('modal-confirm-close-terminal');
+      const infoEl = document.getElementById('close-term-ssh-info');
+      if (modal && infoEl) {
+        const portStr = (session.port && Number(session.port) !== 22) ? `:${session.port}` : '';
+        infoEl.innerHTML = `Sesión activa: <b>${this.escapeHtml(session.name || 'SSH')}</b> <span style="font-family:monospace; color:var(--text-dim); font-size:11px;">(${this.escapeHtml(session.username || '')}@${this.escapeHtml(session.host || '')}${portStr})</span>`;
+        this.openModal(modal);
+        return;
+      }
+    }
+
+    this.executeCloseTerminal(termId);
+  }
+
+  executeCloseTerminal(termId) {
+    const inst = this.terminals.get(termId);
+    if (inst && (inst.sshSession || inst.pendingSshSession)) {
+      try {
+        window.api.writeTerminal(termId, 'exit\r');
+      } catch (e) {}
+    }
+
     const tab = this.tabs.find((t) => t.id === this.activeTabId);
     if (!tab) return;
 

@@ -709,6 +709,37 @@
     </div>
   </div>
 
+  <!-- Modal: Confirm Close Terminal with Active SSH -->
+  <div id="modal-confirm-close-terminal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">⚠️</span> Desconectar SSH y Cerrar Terminal
+        </div>
+        <button class="modal-close" data-close-modal="modal-confirm-close-terminal">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 10px;">
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+          <div style="font-weight: 600; color: #ef4444; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+            <span>⚠️</span> Esta terminal tiene una conexión SSH activa
+          </div>
+          <div id="close-term-ssh-info" style="font-size: 12px; color: var(--text-main); margin-bottom: 8px;">
+            <!-- SSH session details injected here -->
+          </div>
+          <p style="margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+            Al cerrar esta terminal se desconectará la sesión remota de forma segura. ¿Deseas desconectar y cerrar la terminal?
+          </p>
+        </div>
+
+        <div class="form-actions" style="margin-top: 10px; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn" id="btn-cancel-close-terminal" data-close-modal="modal-confirm-close-terminal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="btn-confirm-close-terminal">✕ Desconectar y Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Git Commit Interactivo -->
   <div id="modal-git-commit" class="modal hidden">
     <div class="modal-backdrop"></div>

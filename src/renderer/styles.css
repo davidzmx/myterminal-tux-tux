@@ -455,28 +455,36 @@ body.theme-dark .tb-shell-select:disabled {
 .tb-ssh-badge {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   background-color: #1e3a8a;
   border: 1px solid #3b82f6;
   color: #ffffff;
   border-radius: 4px;
-  padding: 2px 8px;
+  padding: 2px 7px;
   font-size: 11px;
   font-weight: 500;
   height: 24px;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .ssh-key-icon {
   font-size: 12px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .ssh-badge-name {
   font-weight: 700;
   color: #ffffff !important;
   letter-spacing: 0.2px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
 }
 
 .ssh-badge-host {
@@ -487,6 +495,11 @@ body.theme-dark .tb-shell-select:disabled {
   border-radius: 3px;
   font-weight: 600;
   font-size: 11px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 2;
 }
 
 body.theme-light .tb-ssh-badge {
@@ -747,7 +760,15 @@ body.theme-dark .terminal-header.header-ssh .tb-non-git-badge {
   cursor: pointer;
   height: 24px;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s ease;
+}
+
+.tb-group-btn .group-name {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tb-group-btn:hover {
@@ -1143,6 +1164,8 @@ body.theme-light .tb-git-overflow-item:hover {
   align-items: center;
   gap: 4px;
   margin-left: 8px;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 .term-tool-btn {
