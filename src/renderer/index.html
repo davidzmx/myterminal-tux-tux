@@ -184,6 +184,38 @@
     </div>
   </div>
 
+  <!-- Modal: Add / Edit Favorite Folder -->
+  <div id="modal-add-favorite" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">⭐</span>
+          <span id="fav-modal-title">Agregar a Favoritos</span>
+        </div>
+        <button class="modal-close" data-close-modal="modal-add-favorite">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-add-favorite">
+          <input type="hidden" id="fav-edit-id" value="">
+          <div class="form-group">
+            <label for="fav-folder-name">Nombre / Etiqueta *</label>
+            <input type="text" id="fav-folder-name" required placeholder="Ej. Mi Proyecto, Backend, Tux Tux">
+          </div>
+          <div class="form-group">
+            <label for="fav-folder-path">Ruta de la Carpeta *</label>
+            <input type="text" id="fav-folder-path" required placeholder="/home/usuario/carpeta">
+            <small class="form-hint">Ruta absoluta del directorio a guardar.</small>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" data-close-modal="modal-add-favorite">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-favorite-item">Guardar Favorito</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: General Settings & Command Button Groups Config -->
   <div id="modal-settings" class="modal hidden">
     <div class="modal-backdrop"></div>
@@ -198,6 +230,7 @@
         <div class="settings-nav">
           <button class="settings-nav-btn active" data-settings-tab="tab-general-opts">General & Terminal</button>
           <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Grupos y Botones de Comandos</button>
+          <button class="settings-nav-btn" data-settings-tab="tab-fav-opts">Carpetas Favoritas</button>
         </div>
 
         <!-- Section 1: General Options -->
@@ -274,6 +307,8 @@
             <div style="display:flex; align-items:center; gap:8px;">
               <label for="cfg-button-group-select" style="font-weight:600; font-size:12px; margin:0; color:var(--text-main);">Grupo activo:</label>
               <select id="cfg-button-group-select" class="form-control" style="height:28px; font-weight:600; padding:2px 8px; font-size:12px; border-radius:4px; min-width:170px; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);"></select>
+              <button type="button" id="btn-group-move-up" class="btn btn-sm" title="Mover grupo hacia arriba">⬆️</button>
+              <button type="button" id="btn-group-move-down" class="btn btn-sm" title="Mover grupo hacia abajo">⬇️</button>
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
               <button type="button" id="btn-add-group" class="btn btn-sm">+ Nuevo Grupo</button>
@@ -300,6 +335,33 @@
           <div class="form-actions">
             <span></span>
             <button id="btn-save-git-actions" class="btn btn-primary">Guardar Grupos y Botones</button>
+          </div>
+        </div>
+
+        <!-- Section 3: Favorite Folders Options -->
+        <div id="tab-fav-opts" class="settings-tab-pane">
+          <div class="git-actions-header">
+            <div>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Gestiona tus carpetas y rutas favoritas para navegar con un solo clic.</p>
+              <small class="form-hint" style="margin-top:0;">Puedes agregar, reordenar, editar o eliminar accesos rápidos a carpetas del sistema.</small>
+            </div>
+            <div class="git-actions-top-btns">
+              <button type="button" id="btn-add-favorite-setting" class="btn btn-sm btn-primary">+ Nueva Carpeta</button>
+            </div>
+          </div>
+
+          <!-- Table Header -->
+          <div class="fav-table-header">
+            <span class="col-fav-name">Nombre / Etiqueta</span>
+            <span class="col-fav-path">Ruta en Disco</span>
+            <span class="col-fav-ops">Acciones</span>
+          </div>
+
+          <div id="favorites-list-config" class="favorites-config-list"></div>
+
+          <div class="form-actions">
+            <span></span>
+            <button id="btn-save-favorites-config" class="btn btn-primary">Guardar Favoritos</button>
           </div>
         </div>
       </div>

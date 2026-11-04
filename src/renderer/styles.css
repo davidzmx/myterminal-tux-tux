@@ -1375,7 +1375,7 @@ body.theme-light .ssh-select-btn:hover {
 }
 
 .col-ops {
-  width: 80px;
+  width: 140px;
   text-align: right;
 }
 
@@ -1424,8 +1424,261 @@ body.theme-light .ssh-select-btn:hover {
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 80px;
+  width: 140px;
   justify-content: flex-end;
+}
+
+.btn-row-order {
+  padding: 2px 4px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-row-order:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-cyan);
+}
+
+.btn-row-order:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+body.theme-light .btn-row-order {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+body.theme-light .btn-row-order:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+/* Favorites Toolbar Button & Dropdown */
+.fav-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.fav-select-btn {
+  background-color: #2563eb;
+  border: 1px solid #1d4ed8;
+  color: #ffffff;
+  height: 24px;
+  width: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.fav-select-btn svg {
+  display: block;
+}
+
+.fav-select-btn:hover {
+  background-color: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body.theme-light .fav-select-btn {
+  background-color: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+body.theme-light .fav-select-btn:hover {
+  background-color: #1d4ed8;
+}
+
+.fav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  min-width: 260px;
+  max-width: 400px;
+  z-index: 120;
+  display: none;
+  padding: 4px 0;
+}
+
+.fav-dropdown-menu.show {
+  display: block;
+}
+
+.fav-dropdown-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.15s;
+}
+
+.fav-dropdown-item:hover {
+  background-color: var(--accent-cyan);
+  color: #0f172a;
+}
+
+.fav-dropdown-item.fav-add-action {
+  font-weight: 600;
+  color: #4ade80;
+}
+
+body.theme-light .fav-dropdown-item.fav-add-action {
+  color: #15803d;
+}
+
+.fav-dropdown-item.fav-manage-action {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.fav-dropdown-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+.fav-item-name {
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--text-main);
+}
+
+.fav-item-path {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+
+.fav-dropdown-item:hover .fav-item-name,
+.fav-dropdown-item:hover .fav-item-path {
+  color: #0f172a;
+}
+
+.fav-empty-msg {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Favorites Management in Settings */
+.fav-table-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 6px 6px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.col-fav-name {
+  width: 170px;
+}
+
+.col-fav-path {
+  flex: 1;
+}
+
+.col-fav-ops {
+  width: 140px;
+  text-align: right;
+}
+
+.favorites-config-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.fav-config-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  transition: background-color 0.15s;
+}
+
+.fav-config-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.fav-input-name {
+  width: 170px !important;
+  font-weight: 500;
+}
+
+.fav-input-path {
+  flex: 1 !important;
+  font-family: monospace !important;
+  color: var(--accent-cyan) !important;
+}
+
+.fav-row-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  justify-content: flex-end;
+}
+
+body.theme-light .fav-input-path {
+  color: #0369a1 !important;
+}
+
+body.theme-light .fav-table-header {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+body.theme-light .fav-config-row {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+}
+
+body.theme-light .fav-config-row:hover {
+  background-color: #f8fafc;
 }
 
 /* Password Input with eye toggle button */

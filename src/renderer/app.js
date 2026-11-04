@@ -123,6 +123,19 @@ class TuxTerminalApp {
       this.availableShells = [{ name: 'Bash', path: '/bin/bash' }];
     }
 
+    try {
+      this.systemInfo = await window.api.getSystemInfo();
+      this.homeDir = this.systemInfo?.homedir || null;
+    } catch (e) {
+      console.error('Error fetching system info:', e);
+    }
+
+    if (!this.config.favorites || !Array.isArray(this.config.favorites)) {
+      this.config.favorites = [
+        { id: 'fav-home', name: 'Inicio (~)', path: this.homeDir || '~' }
+      ];
+    }
+
     this.applyTheme(this.config.theme || 'dark');
     this.applySshHeaderColor();
 
@@ -326,6 +339,42 @@ class TuxTerminalApp {
     if (this.btnDeleteGroup) {
       this.btnDeleteGroup.addEventListener('click', () => {
         this.deleteSelectedGroup();
+      });
+    }
+
+    const btnGroupUp = document.getElementById('btn-group-move-up');
+    if (btnGroupUp) {
+      btnGroupUp.addEventListener('click', () => {
+        this.moveSelectedGroup(-1);
+      });
+    }
+
+    const btnGroupDown = document.getElementById('btn-group-move-down');
+    if (btnGroupDown) {
+      btnGroupDown.addEventListener('click', () => {
+        this.moveSelectedGroup(1);
+      });
+    }
+
+    const btnAddFavSetting = document.getElementById('btn-add-favorite-setting');
+    if (btnAddFavSetting) {
+      btnAddFavSetting.addEventListener('click', () => {
+        this.openAddFavoriteModal();
+      });
+    }
+
+    const formAddFav = document.getElementById('form-add-favorite');
+    if (formAddFav) {
+      formAddFav.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await this.handleSaveFavoriteSubmit();
+      });
+    }
+
+    const btnSaveFavs = document.getElementById('btn-save-favorites-config');
+    if (btnSaveFavs) {
+      btnSaveFavs.addEventListener('click', async () => {
+        await this.saveFavoritesConfig();
       });
     }
 
@@ -620,6 +669,9 @@ class TuxTerminalApp {
       if (!e.target.closest('.tb-git-overflow-wrapper')) {
         document.querySelectorAll('.tb-git-overflow-menu.show').forEach((m) => m.classList.remove('show'));
       }
+      if (!e.target.closest('.fav-select-wrapper')) {
+        document.querySelectorAll('.fav-dropdown-menu.show').forEach((m) => m.classList.remove('show'));
+      }
     });
 
     if (this.tabContextMenu) {
@@ -740,6 +792,7 @@ class TuxTerminalApp {
     });
 
     this.renderGitActionsConfig();
+    this.renderFavoritesConfig();
 
     if (tabName) {
       document.querySelectorAll('.settings-nav-btn').forEach((b) => {
@@ -857,6 +910,44 @@ class TuxTerminalApp {
       const btnsBox = document.createElement('div');
       btnsBox.className = 'git-action-row-btns col-ops';
 
+      // Move Up button
+      const btnUp = document.createElement('button');
+      btnUp.type = 'button';
+      btnUp.className = 'btn-row-order';
+      btnUp.innerHTML = '⬆️';
+      btnUp.title = 'Mover acción arriba';
+      btnUp.disabled = index === 0;
+      btnUp.addEventListener('click', async () => {
+        const temp = group.actions[index];
+        group.actions[index] = group.actions[index - 1];
+        group.actions[index - 1] = temp;
+        if (group.isGit || group.id === 'group-git') {
+          this.config.gitActions = group.actions;
+        }
+        await window.api.saveConfig(this.config);
+        this.renderGitActionsConfig();
+        this.refreshAllGitToolbars();
+      });
+
+      // Move Down button
+      const btnDown = document.createElement('button');
+      btnDown.type = 'button';
+      btnDown.className = 'btn-row-order';
+      btnDown.innerHTML = '⬇️';
+      btnDown.title = 'Mover acción abajo';
+      btnDown.disabled = index === actions.length - 1;
+      btnDown.addEventListener('click', async () => {
+        const temp = group.actions[index];
+        group.actions[index] = group.actions[index + 1];
+        group.actions[index + 1] = temp;
+        if (group.isGit || group.id === 'group-git') {
+          this.config.gitActions = group.actions;
+        }
+        await window.api.saveConfig(this.config);
+        this.renderGitActionsConfig();
+        this.refreshAllGitToolbars();
+      });
+
       // Edit dialog button
       const btnEdit = document.createElement('button');
       btnEdit.type = 'button';
@@ -882,6 +973,8 @@ class TuxTerminalApp {
         this.refreshAllGitToolbars();
       });
 
+      btnsBox.appendChild(btnUp);
+      btnsBox.appendChild(btnDown);
       btnsBox.appendChild(btnEdit);
       btnsBox.appendChild(btnDel);
 
@@ -925,9 +1018,28 @@ class TuxTerminalApp {
       this.config.buttonGroups = this.config.buttonGroups.filter((g) => g.id !== group.id);
       this.selectedConfigGroupId = this.config.buttonGroups[0]?.id || 'group-git';
       await window.api.saveConfig(this.config);
+      this.populateConfigGroupSelect();
       this.renderGitActionsConfig();
       this.refreshAllGitToolbars();
     }
+  }
+
+  async moveSelectedGroup(direction) {
+    if (!this.config.buttonGroups) return;
+    const groups = this.config.buttonGroups;
+    const idx = groups.findIndex((g) => g.id === this.selectedConfigGroupId);
+    if (idx === -1) return;
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= groups.length) return;
+
+    const temp = groups[idx];
+    groups[idx] = groups[targetIdx];
+    groups[targetIdx] = temp;
+
+    await window.api.saveConfig(this.config);
+    this.populateConfigGroupSelect();
+    this.renderGitActionsConfig();
+    this.refreshAllGitToolbars();
   }
 
   async handleSaveGroupSubmit() {
@@ -1048,14 +1160,210 @@ class TuxTerminalApp {
     }
   }
 
+  // ================= FAVORITES MANAGEMENT =================
+  renderFavoritesConfig() {
+    const listEl = document.getElementById('favorites-list-config');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const favs = this.config.favorites || [];
+    if (favs.length === 0) {
+      listEl.innerHTML = '<div class="fav-empty-msg" style="padding:16px; text-align:center;">No tienes carpetas favoritas guardadas. Haz clic en <b>+ Nueva Carpeta</b> para agregar una.</div>';
+      return;
+    }
+
+    favs.forEach((fav, index) => {
+      const row = document.createElement('div');
+      row.className = 'fav-config-row';
+
+      const inputName = document.createElement('input');
+      inputName.type = 'text';
+      inputName.className = 'fav-input-name';
+      inputName.value = fav.name || '';
+      inputName.placeholder = 'Nombre';
+
+      const inputPath = document.createElement('input');
+      inputPath.type = 'text';
+      inputPath.className = 'fav-input-path';
+      inputPath.value = fav.path || '';
+      inputPath.placeholder = 'Ruta absoluta';
+
+      const btnsBox = document.createElement('div');
+      btnsBox.className = 'fav-row-btns col-fav-ops';
+
+      // Move Up button
+      const btnUp = document.createElement('button');
+      btnUp.type = 'button';
+      btnUp.className = 'btn-row-order';
+      btnUp.innerHTML = '⬆️';
+      btnUp.title = 'Mover favorito arriba';
+      btnUp.disabled = index === 0;
+      btnUp.addEventListener('click', async () => {
+        const temp = this.config.favorites[index];
+        this.config.favorites[index] = this.config.favorites[index - 1];
+        this.config.favorites[index - 1] = temp;
+        await window.api.saveConfig(this.config);
+        this.renderFavoritesConfig();
+      });
+
+      // Move Down button
+      const btnDown = document.createElement('button');
+      btnDown.type = 'button';
+      btnDown.className = 'btn-row-order';
+      btnDown.innerHTML = '⬇️';
+      btnDown.title = 'Mover favorito abajo';
+      btnDown.disabled = index === favs.length - 1;
+      btnDown.addEventListener('click', async () => {
+        const temp = this.config.favorites[index];
+        this.config.favorites[index] = this.config.favorites[index + 1];
+        this.config.favorites[index + 1] = temp;
+        await window.api.saveConfig(this.config);
+        this.renderFavoritesConfig();
+      });
+
+      // Edit dialog button
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button';
+      btnEdit.className = 'btn btn-sm btn-primary';
+      btnEdit.innerHTML = '✏️';
+      btnEdit.title = 'Editar en ventana';
+      btnEdit.addEventListener('click', () => {
+        this.openAddFavoriteModal(null, fav);
+      });
+
+      // Delete button
+      const btnDel = document.createElement('button');
+      btnDel.type = 'button';
+      btnDel.className = 'btn btn-sm btn-danger';
+      btnDel.innerHTML = '🗑️';
+      btnDel.title = 'Eliminar favorito';
+      btnDel.addEventListener('click', async () => {
+        if (confirm(`¿Eliminar la carpeta favorita "${fav.name}"?`)) {
+          this.config.favorites.splice(index, 1);
+          await window.api.saveConfig(this.config);
+          this.renderFavoritesConfig();
+        }
+      });
+
+      btnsBox.appendChild(btnUp);
+      btnsBox.appendChild(btnDown);
+      btnsBox.appendChild(btnEdit);
+      btnsBox.appendChild(btnDel);
+
+      row.appendChild(inputName);
+      row.appendChild(inputPath);
+      row.appendChild(btnsBox);
+
+      listEl.appendChild(row);
+    });
+  }
+
+  async saveFavoritesConfig() {
+    const listEl = document.getElementById('favorites-list-config');
+    if (!listEl) return;
+    const rows = listEl.querySelectorAll('.fav-config-row');
+    const updated = [];
+    rows.forEach((row, i) => {
+      const orig = this.config.favorites[i];
+      const name = row.querySelector('.fav-input-name').value.trim() || orig?.name || 'Carpeta';
+      const folderPath = row.querySelector('.fav-input-path').value.trim() || orig?.path || '';
+      updated.push({
+        id: orig?.id || 'fav_' + Math.random().toString(36).substring(2, 9),
+        name,
+        path: folderPath
+      });
+    });
+
+    this.config.favorites = updated;
+    await window.api.saveConfig(this.config);
+    this.renderFavoritesConfig();
+    this.modalSettings.classList.add('hidden');
+  }
+
+  async openAddFavoriteModal(termId = null, existingFav = null) {
+    const modal = document.getElementById('modal-add-favorite');
+    const titleEl = document.getElementById('fav-modal-title');
+    const idInput = document.getElementById('fav-edit-id');
+    const nameInput = document.getElementById('fav-folder-name');
+    const pathInput = document.getElementById('fav-folder-path');
+
+    if (!modal) return;
+
+    if (existingFav) {
+      if (titleEl) titleEl.textContent = 'Editar Carpeta Favorita';
+      idInput.value = existingFav.id || '';
+      nameInput.value = existingFav.name || '';
+      pathInput.value = existingFav.path || '';
+    } else {
+      if (titleEl) titleEl.textContent = 'Agregar a Favoritos';
+      idInput.value = '';
+      let defaultPath = '';
+      if (termId) {
+        try {
+          defaultPath = await window.api.getTerminalCwd(termId);
+        } catch (e) {}
+      }
+      if (!defaultPath && this.homeDir) {
+        defaultPath = this.homeDir;
+      }
+      pathInput.value = defaultPath || '';
+      const parts = (defaultPath || '').split(/[\\/]/).filter(Boolean);
+      nameInput.value = parts.length > 0 ? parts[parts.length - 1] : 'Mi Carpeta';
+    }
+
+    modal.classList.remove('hidden');
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  async handleSaveFavoriteSubmit() {
+    const idInput = document.getElementById('fav-edit-id');
+    const nameInput = document.getElementById('fav-folder-name');
+    const pathInput = document.getElementById('fav-folder-path');
+    const modal = document.getElementById('modal-add-favorite');
+
+    const id = idInput.value;
+    const name = nameInput.value.trim();
+    const folderPath = pathInput.value.trim();
+
+    if (!name || !folderPath) {
+      alert('Por favor ingresa un nombre y una ruta para la carpeta favorita.');
+      return;
+    }
+
+    if (!this.config.favorites || !Array.isArray(this.config.favorites)) {
+      this.config.favorites = [];
+    }
+
+    if (id) {
+      const item = this.config.favorites.find((f) => f.id === id);
+      if (item) {
+        item.name = name;
+        item.path = folderPath;
+      }
+    } else {
+      this.config.favorites.push({
+        id: 'fav_' + Math.random().toString(36).substring(2, 9),
+        name: name,
+        path: folderPath
+      });
+    }
+
+    await window.api.saveConfig(this.config);
+    if (modal) modal.classList.add('hidden');
+    this.renderFavoritesConfig();
+  }
+
   // ================= TABS MANAGEMENT =================
   createTab(title = 'Pestaña', layoutTree = null) {
     const tabId = 'tab_' + Math.random().toString(36).substring(2, 9);
+    const newTermId = 'term_' + Math.random().toString(36).substring(2, 9);
     
     const initialTree = layoutTree || {
-      id: 'term_' + Math.random().toString(36).substring(2, 9),
+      id: newTermId,
       type: 'terminal',
-      title: 'Terminal 1'
+      title: 'Terminal 1',
+      cwd: this.homeDir || null
     };
 
     const tab = {
@@ -1466,6 +1774,41 @@ class TuxTerminalApp {
       await this.handleSwitchShell(node.id, chosenPath);
     });
 
+    // 2.3 Favorites Toolbar Button & Dropdown
+    const favWrapper = document.createElement('div');
+    favWrapper.className = 'fav-select-wrapper';
+    favWrapper.id = `fav-wrapper-${node.id}`;
+
+    const btnFav = document.createElement('button');
+    btnFav.type = 'button';
+    btnFav.className = 'fav-select-btn';
+    btnFav.id = `fav-btn-${node.id}`;
+    btnFav.title = 'Carpetas Favoritas';
+    btnFav.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+    </svg>`;
+
+    const favDropdown = document.createElement('div');
+    favDropdown.className = 'fav-dropdown-menu';
+    favDropdown.id = `fav-dropdown-${node.id}`;
+
+    btnFav.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.fav-dropdown-menu.show').forEach((m) => {
+        if (m !== favDropdown) m.classList.remove('show');
+      });
+      document.querySelectorAll('.ssh-dropdown-menu.show').forEach((m) => m.classList.remove('show'));
+      document.querySelectorAll('.tb-group-dropdown.show').forEach((m) => m.classList.remove('show'));
+      document.querySelectorAll('.tb-git-dropdown.show').forEach((m) => m.classList.remove('show'));
+      document.querySelectorAll('.tb-git-overflow-menu.show').forEach((m) => m.classList.remove('show'));
+      this.populateFavoritesDropdown(favDropdown, node.id);
+      favDropdown.classList.toggle('show');
+    });
+
+    favWrapper.appendChild(btnFav);
+    favWrapper.appendChild(favDropdown);
+
     // 2.5 SSH Active Badge (Shown when connected to an SSH profile)
     const sshBadge = document.createElement('div');
     sshBadge.className = 'tb-ssh-badge hidden';
@@ -1595,6 +1938,7 @@ class TuxTerminalApp {
 
     leftGroup.appendChild(termLabel);
     leftGroup.appendChild(shellSelect);
+    leftGroup.appendChild(favWrapper);
     leftGroup.appendChild(sshBadge);
     leftGroup.appendChild(gitBranchWrapper);
     leftGroup.appendChild(gitUserBtn);
@@ -1709,6 +2053,61 @@ class TuxTerminalApp {
     resizeObs.observe(header);
 
     return pane;
+  }
+
+  populateFavoritesDropdown(dropdownEl, termId) {
+    dropdownEl.innerHTML = '';
+
+    // Option 1: Add current folder
+    const addItem = document.createElement('div');
+    addItem.className = 'fav-dropdown-item fav-add-action';
+    addItem.innerHTML = '⭐ <span>+ Agregar carpeta actual a favoritos...</span>';
+    addItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownEl.classList.remove('show');
+      this.openAddFavoriteModal(termId);
+    });
+    dropdownEl.appendChild(addItem);
+
+    const divider1 = document.createElement('div');
+    divider1.className = 'fav-dropdown-divider';
+    dropdownEl.appendChild(divider1);
+
+    const favs = this.config.favorites || [];
+    if (favs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'fav-empty-msg';
+      empty.textContent = 'No hay carpetas favoritas';
+      dropdownEl.appendChild(empty);
+    } else {
+      favs.forEach((fav) => {
+        const item = document.createElement('div');
+        item.className = 'fav-dropdown-item';
+        item.title = fav.path;
+        item.innerHTML = `<span class="fav-icon">📁</span> <span class="fav-item-name">${fav.name}</span> <span class="fav-item-path">${fav.path}</span>`;
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dropdownEl.classList.remove('show');
+          window.api.writeTerminal(termId, `cd "${fav.path.replace(/"/g, '\\"')}"\r`);
+          setTimeout(() => this.refreshGitInfo(termId), 400);
+        });
+        dropdownEl.appendChild(item);
+      });
+    }
+
+    const divider2 = document.createElement('div');
+    divider2.className = 'fav-dropdown-divider';
+    dropdownEl.appendChild(divider2);
+
+    const manageItem = document.createElement('div');
+    manageItem.className = 'fav-dropdown-item fav-manage-action';
+    manageItem.innerHTML = '⚙️ <span>Gestionar favoritos...</span>';
+    manageItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownEl.classList.remove('show');
+      this.openSettingsModal('tab-fav-opts');
+    });
+    dropdownEl.appendChild(manageItem);
   }
 
   populateGroupDropdown(dropdownEl, termId) {
@@ -1938,6 +2337,7 @@ class TuxTerminalApp {
     const sshBadge = document.getElementById(`ssh-badge-${termId}`);
     const termLabel = document.getElementById(`tb-label-${termId}`);
     const shellSelect = document.getElementById(`shell-select-${termId}`);
+    const favWrapper = document.getElementById(`fav-wrapper-${termId}`);
     const branchWrapper = document.getElementById(`git-branch-wrapper-${termId}`);
     const userBtn = document.getElementById(`git-user-btn-${termId}`);
     const gitActions = document.getElementById(`git-actions-${termId}`);
@@ -1961,6 +2361,7 @@ class TuxTerminalApp {
       // Hide local shell select and label while in remote SSH
       if (termLabel) termLabel.classList.add('hidden');
       if (shellSelect) shellSelect.classList.add('hidden');
+      if (favWrapper) favWrapper.classList.add('hidden');
 
       // In remote SSH, hide local git branch and user config
       if (branchWrapper) branchWrapper.classList.add('hidden');
@@ -1988,6 +2389,7 @@ class TuxTerminalApp {
       // Restore local shell select and label
       if (termLabel) termLabel.classList.remove('hidden');
       if (shellSelect) shellSelect.classList.remove('hidden');
+      if (favWrapper) favWrapper.classList.remove('hidden');
 
       this.refreshGitInfo(termId);
     }
@@ -2851,15 +3253,23 @@ class TuxTerminalApp {
   }
 
   // ================= SPLIT ACTIONS =================
-  splitTerminal(targetTermId, orientation) {
+  async splitTerminal(targetTermId, orientation) {
     const tab = this.tabs.find((t) => t.id === this.activeTabId);
     if (!tab) return;
+
+    let targetCwd = null;
+    try {
+      targetCwd = await window.api.getTerminalCwd(targetTermId);
+    } catch (e) {
+      console.warn('Could not query target CWD for split:', e);
+    }
 
     const newTermId = 'term_' + Math.random().toString(36).substring(2, 9);
     const newTermNode = {
       id: newTermId,
       type: 'terminal',
-      title: `Terminal ${this.terminals.size + 1}`
+      title: `Terminal ${this.terminals.size + 1}`,
+      cwd: targetCwd || null
     };
 
     const replaceInTree = (node) => {

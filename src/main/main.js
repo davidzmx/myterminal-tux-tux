@@ -227,6 +227,9 @@ function getDefaultConfig() {
       { id: 'act-fetch', label: 'Fetch', cmd: 'git fetch', enabled: true },
       { id: 'act-diff', label: 'Diff', cmd: 'git diff', enabled: true },
       { id: 'act-log', label: 'Log', cmd: 'git log --oneline -n 10', enabled: true }
+    ],
+    favorites: [
+      { id: 'fav-home', name: 'Inicio (~)', path: os.homedir() }
     ]
   };
 }
@@ -251,11 +254,17 @@ function getUserConfig() {
   const gitGroup = buttonGroups.find((g) => g.isGit || g.id === 'group-git');
   const gitActions = gitGroup ? gitGroup.actions : defaults.gitActions;
 
+  let favorites = saved.favorites;
+  if (!favorites || !Array.isArray(favorites)) {
+    favorites = JSON.parse(JSON.stringify(defaults.favorites));
+  }
+
   return {
     ...defaults,
     ...saved,
     buttonGroups,
-    gitActions
+    gitActions,
+    favorites
   };
 }
 
@@ -839,6 +848,10 @@ function registerIpcHandlers() {
   });
 
   // System info
+  ipcMain.handle('system:get-home', () => {
+    return os.homedir();
+  });
+
   ipcMain.handle('system:info', () => {
     return {
       platform: process.platform,

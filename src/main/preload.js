@@ -52,5 +52,6 @@ contextBridge.exposeInMainWorld('api', {
   deleteTabTemplate: (name) => ipcRenderer.invoke('tab-templates:delete', name),
 
   // System
+  getHomeDir: () => ipcRenderer.invoke('system:get-home'),
   getSystemInfo: () => ipcRenderer.invoke('system:info')
 });
