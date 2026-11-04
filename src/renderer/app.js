@@ -29,6 +29,16 @@ class TuxTerminalApp {
     this.loadInitialData();
   }
 
+  escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   initElements() {
     this.tabsListEl = document.getElementById('tabs-list');
     this.workspaceEl = document.getElementById('workspace');
@@ -83,6 +93,8 @@ class TuxTerminalApp {
     this.btnToggleSshPhrase = document.getElementById('btn-toggle-ssh-phrase');
     this.btnSshDelete = document.getElementById('btn-ssh-delete');
     this.btnSshConnectActive = document.getElementById('btn-ssh-connect-active');
+    this.btnSshTest = document.getElementById('btn-ssh-test');
+    this.sshTestResult = document.getElementById('ssh-test-result');
 
     // Button Groups & Actions elements
     this.modalEditButtonGroup = document.getElementById('modal-edit-button-group');
@@ -459,11 +471,21 @@ class TuxTerminalApp {
       this.handleDeleteSshProfile();
     });
 
+    if (this.btnSshTest) {
+      this.btnSshTest.addEventListener('click', () => {
+        this.handleTestSshConnection();
+      });
+    }
+
     this.btnSshConnectActive.addEventListener('click', () => {
       const profile = this.getSelectedFormProfile();
       if (profile && this.activeTerminalId) {
-        this.handleSshProfileSelection(this.activeTerminalId, profile);
         this.modalSsh.classList.add('hidden');
+        this.handleSshProfileSelection(this.activeTerminalId, profile);
+        setTimeout(() => {
+          const inst = this.terminals.get(this.activeTerminalId);
+          if (inst && inst.term) inst.term.focus();
+        }, 120);
       } else if (!this.activeTerminalId) {
         alert('Selecciona o haz clic en una terminal primero.');
       }
@@ -3474,6 +3496,10 @@ class TuxTerminalApp {
         setTimeout(() => {
           window.api.writeTerminal(termId, `${secret}\r`);
           cleanup();
+          setTimeout(() => {
+            const currentInst = this.terminals.get(termId);
+            if (currentInst && currentInst.term) currentInst.term.focus();
+          }, 150);
         }, 120);
       }
     });
@@ -3484,6 +3510,20 @@ class TuxTerminalApp {
   }
 
   connectSshProfile(termId, profile) {
+    this.setActiveTerminal(termId);
+    const inst = this.terminals.get(termId);
+    if (inst && inst.term) {
+      inst.term.focus();
+    }
+    setTimeout(() => {
+      const currentInst = this.terminals.get(termId);
+      if (currentInst && currentInst.term) currentInst.term.focus();
+    }, 120);
+    setTimeout(() => {
+      const currentInst = this.terminals.get(termId);
+      if (currentInst && currentInst.term) currentInst.term.focus();
+    }, 350);
+
     let sshCmd = 'ssh';
     if (profile.port && Number(profile.port) !== 22) {
       sshCmd += ` -p ${profile.port}`;
@@ -3501,7 +3541,6 @@ class TuxTerminalApp {
       this.setupSshPasswordAutoInjector(termId, secretToSend);
     }
 
-    const inst = this.terminals.get(termId);
     if (inst) {
       if (inst.sshPollTimer) {
         clearInterval(inst.sshPollTimer);
@@ -3540,6 +3579,9 @@ class TuxTerminalApp {
             inst.title = `SSH: ${profile.name} (${profile.host})`;
             this.updateToolbarSshStatus(termId);
             this.updateStatusBar();
+            setTimeout(() => {
+              if (inst && inst.term) inst.term.focus();
+            }, 60);
             return;
           }
 
@@ -3571,14 +3613,15 @@ class TuxTerminalApp {
     menuEl.innerHTML = '';
     if (this.profiles.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'ssh-dropdown-item';
+      empty.className = 'ssh-dropdown-item empty';
       empty.textContent = 'Sin perfiles guardados';
       menuEl.appendChild(empty);
     } else {
       this.profiles.forEach((p) => {
         const item = document.createElement('div');
         item.className = 'ssh-dropdown-item';
-        item.innerHTML = `<span>${p.name}</span> <small style="color:var(--text-dim)">${p.username}@${p.host}</small>`;
+        const portStr = (p.port && Number(p.port) !== 22) ? `:${p.port}` : '';
+        item.innerHTML = `<span class="ssh-item-name" title="${this.escapeHtml(p.name)}">${this.escapeHtml(p.name)}</span><span class="ssh-item-host">${this.escapeHtml(p.username)}@${this.escapeHtml(p.host)}${portStr}</span>`;
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           menuEl.classList.remove('show');
@@ -3602,10 +3645,12 @@ class TuxTerminalApp {
   handleSshProfileSelection(termId, profile) {
     const inst = this.terminals.get(termId);
     if (!inst) return;
+    this.setActiveTerminal(termId);
 
     if (inst.sshSession) {
       if (inst.sshSession.id === profile.id || (inst.sshSession.host === profile.host && inst.sshSession.username === profile.username)) {
         alert(`Esta terminal ya se encuentra conectada al perfil "${profile.name}" (${profile.host}).`);
+        if (inst.term) inst.term.focus();
         return;
       }
       this.openSshSwitchModal(termId, profile);
@@ -3672,6 +3717,10 @@ class TuxTerminalApp {
     this.sshPasswordGroup.style.display = 'block';
     this.btnSshDelete.classList.add('hidden');
     document.querySelectorAll('.profile-card').forEach((c) => c.classList.remove('active'));
+    if (this.sshTestResult) {
+      this.sshTestResult.className = 'ssh-test-result-box hidden';
+      this.sshTestResult.textContent = '';
+    }
   }
 
   fillSshForm(p) {
@@ -3693,6 +3742,10 @@ class TuxTerminalApp {
     this.sshPasswordGroup.style.display = isKey ? 'none' : 'block';
 
     this.btnSshDelete.classList.remove('hidden');
+    if (this.sshTestResult) {
+      this.sshTestResult.className = 'ssh-test-result-box hidden';
+      this.sshTestResult.textContent = '';
+    }
   }
 
   getSelectedFormProfile() {
@@ -3713,6 +3766,68 @@ class TuxTerminalApp {
       passphrase: document.getElementById('ssh-passphrase').value,
       extraArgs: document.getElementById('ssh-extra-args').value.trim()
     };
+  }
+
+  async handleTestSshConnection() {
+    if (!this.btnSshTest || !this.sshTestResult) return;
+    const host = document.getElementById('ssh-host').value.trim();
+    const username = document.getElementById('ssh-username').value.trim();
+    const port = parseInt(document.getElementById('ssh-port').value, 10) || 22;
+    const authType = document.getElementById('ssh-auth-type').value;
+    const password = document.getElementById('ssh-password').value;
+    const keyPath = document.getElementById('ssh-key-path').value.trim();
+    const passphrase = document.getElementById('ssh-passphrase').value;
+    const extraArgs = document.getElementById('ssh-extra-args').value.trim();
+
+    if (!host) {
+      this.sshTestResult.className = 'ssh-test-result-box error';
+      this.sshTestResult.textContent = '❌ Por favor ingresa el Host / Dirección IP.';
+      return;
+    }
+    if (!username) {
+      this.sshTestResult.className = 'ssh-test-result-box error';
+      this.sshTestResult.textContent = '❌ Por favor ingresa el Usuario SSH.';
+      return;
+    }
+
+    this.btnSshTest.disabled = true;
+    const originalText = this.btnSshTest.innerHTML;
+    this.btnSshTest.innerHTML = '⏳ Probando...';
+
+    this.sshTestResult.className = 'ssh-test-result-box testing';
+    this.sshTestResult.innerHTML = `<span>⏳ Conectando con <b>${this.escapeHtml(host)}:${port}</b>...</span>`;
+
+    try {
+      const res = await window.api.testSshConnection({
+        host,
+        port,
+        username,
+        authType,
+        password,
+        keyPath,
+        passphrase,
+        extraArgs
+      });
+
+      if (res && res.success) {
+        if (res.warning) {
+          this.sshTestResult.className = 'ssh-test-result-box warning';
+          this.sshTestResult.innerHTML = `<span>⚠️ ${this.escapeHtml(res.message || 'Servidor alcanzable')}</span>`;
+        } else {
+          this.sshTestResult.className = 'ssh-test-result-box success';
+          this.sshTestResult.innerHTML = `<span>✅ ${this.escapeHtml(res.message || 'Conexión exitosa')}</span>`;
+        }
+      } else {
+        this.sshTestResult.className = 'ssh-test-result-box error';
+        this.sshTestResult.innerHTML = `<span>❌ ${this.escapeHtml(res?.error || 'Falló la conexión SSH')}</span>`;
+      }
+    } catch (err) {
+      this.sshTestResult.className = 'ssh-test-result-box error';
+      this.sshTestResult.innerHTML = `<span>❌ Error inesperado: ${this.escapeHtml(err.message)}</span>`;
+    } finally {
+      this.btnSshTest.disabled = false;
+      this.btnSshTest.innerHTML = originalText;
+    }
   }
 
   async handleSaveSshProfile() {

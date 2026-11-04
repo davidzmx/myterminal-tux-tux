@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const net = require('net');
 const { execFile, execSync } = require('child_process');
 
 let pty;
@@ -756,6 +757,191 @@ function registerIpcHandlers() {
 
   ipcMain.handle('profiles:save', (event, profiles) => {
     return saveJsonFile('ssh-profiles.json', profiles);
+  });
+
+  // SSH Test Connection (checks host/port reachability, banner, and optional authentication)
+  ipcMain.handle('ssh:test-connection', async (event, profile) => {
+    if (!profile || !profile.host) {
+      return { success: false, error: 'Host o dirección IP no especificada.' };
+    }
+    const host = String(profile.host).trim();
+    const port = parseInt(profile.port, 10) || 22;
+    const username = (profile.username || '').trim();
+    const authType = profile.authType || 'password';
+    const password = profile.password || '';
+    const keyPath = profile.keyPath || '';
+    const passphrase = profile.passphrase || '';
+
+    // Step 1: TCP connection & SSH Protocol Banner
+    let banner = '';
+    try {
+      banner = await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ host, port, timeout: 4500 });
+        let received = '';
+        socket.on('data', (chunk) => {
+          received += chunk.toString();
+          if (received.includes('\n') || received.length > 20) {
+            socket.destroy();
+            resolve(received.trim());
+          }
+        });
+        socket.on('timeout', () => {
+          socket.destroy();
+          reject(new Error(`Tiempo de espera agotado (4.5s) al conectar con ${host}:${port}`));
+        });
+        socket.on('error', (err) => {
+          socket.destroy();
+          let msg = err.message;
+          if (err.code === 'ECONNREFUSED') msg = 'Conexión rechazada (el puerto no está abierto o el servicio SSH no está activo).';
+          if (err.code === 'ENOTFOUND') msg = 'Host o dominio no encontrado (error DNS).';
+          if (err.code === 'EHOSTUNREACH') msg = 'Host no alcanzable (la máquina está apagada o no hay ruta).';
+          if (err.code === 'ETIMEDOUT') msg = 'Tiempo de espera agotado.';
+          reject(new Error(msg));
+        });
+      });
+    } catch (tcpErr) {
+      return {
+        success: false,
+        error: `No se pudo conectar a ${host}:${port} - ${tcpErr.message}`
+      };
+    }
+
+    // If username is empty or pty is not available, report TCP reachability success
+    if (!username || !pty) {
+      return {
+        success: true,
+        message: `Servidor SSH alcanzable en ${host}:${port}. Versión detectada: ${banner}`
+      };
+    }
+
+    // Step 2: Test SSH authentication via pseudo-terminal
+    try {
+      const authResult = await new Promise((resolve) => {
+        let responded = false;
+        let ptyProcess = null;
+
+        const done = (res) => {
+          if (!responded) {
+            responded = true;
+            try {
+              if (ptyProcess) ptyProcess.kill();
+            } catch (e) {}
+            resolve(res);
+          }
+        };
+
+        const timer = setTimeout(() => {
+          done({
+            success: false,
+            error: 'Tiempo de espera agotado esperando autenticación SSH (9s).'
+          });
+        }, 9000);
+
+        const sshArgs = [
+          '-p', String(port),
+          '-o', 'StrictHostKeyChecking=accept-new',
+          '-o', 'ConnectTimeout=5',
+          '-o', 'NumberOfPasswordPrompts=1'
+        ];
+
+        if (authType === 'key' && keyPath) {
+          sshArgs.push('-i', keyPath);
+        }
+
+        sshArgs.push(`${username}@${host}`, 'echo __MYTERM_SSH_TEST_SUCCESS__');
+
+        try {
+          ptyProcess = pty.spawn('ssh', sshArgs, {
+            name: 'xterm-color',
+            cols: 80,
+            rows: 24,
+            cwd: os.homedir(),
+            env: process.env
+          });
+        } catch (spawnErr) {
+          clearTimeout(timer);
+          return resolve({
+            success: true,
+            message: `Servidor SSH alcanzable en ${host}:${port} (${banner}).`
+          });
+        }
+
+        let output = '';
+        let sentSecret = false;
+
+        ptyProcess.onData((data) => {
+          output += data;
+          if (output.includes('__MYTERM_SSH_TEST_SUCCESS__')) {
+            clearTimeout(timer);
+            done({
+              success: true,
+              message: `¡Conexión y autenticación exitosas! (${banner})`
+            });
+            return;
+          }
+
+          const isPrompt = /(password|passphrase|contraseña|password for [^:]+):\s*$/i.test(output.trim());
+          if (isPrompt && !sentSecret) {
+            sentSecret = true;
+            const secret = (authType === 'key' ? passphrase : password) || '';
+            if (secret) {
+              setTimeout(() => {
+                try {
+                  ptyProcess.write(`${secret}\r`);
+                } catch (e) {}
+              }, 120);
+            } else {
+              clearTimeout(timer);
+              done({
+                success: true,
+                warning: true,
+                message: `Servidor SSH alcanzable (${banner}), pero solicita contraseña y el campo está vacío en el formulario.`
+              });
+            }
+          }
+
+          if (/(permission denied|authentication failed)/i.test(output)) {
+            clearTimeout(timer);
+            done({
+              success: false,
+              error: 'Autenticación rechazada (Permission denied). Revisa tu usuario y contraseña/llave.'
+            });
+          }
+        });
+
+        ptyProcess.onExit(({ exitCode }) => {
+          clearTimeout(timer);
+          if (output.includes('__MYTERM_SSH_TEST_SUCCESS__') || exitCode === 0) {
+            done({
+              success: true,
+              message: `¡Conexión y autenticación exitosas! (${banner})`
+            });
+          } else if (/(permission denied|authentication failed)/i.test(output)) {
+            done({
+              success: false,
+              error: 'Autenticación rechazada (Permission denied). Revisa usuario o credenciales.'
+            });
+          } else if (sentSecret) {
+            done({
+              success: false,
+              error: 'Credencial incorrecta o el host cerró la conexión.'
+            });
+          } else {
+            done({
+              success: true,
+              message: `Servidor SSH alcanzable en ${host}:${port} (${banner}).`
+            });
+          }
+        });
+      });
+
+      return authResult;
+    } catch (err) {
+      return {
+        success: true,
+        message: `Servidor SSH alcanzable en ${host}:${port} (${banner}).`
+      };
+    }
   });
 
   // Sessions

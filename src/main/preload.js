@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
   // SSH Profiles
   getProfiles: () => ipcRenderer.invoke('profiles:get'),
   saveProfiles: (profiles) => ipcRenderer.invoke('profiles:save', profiles),
+  testSshConnection: (profile) => ipcRenderer.invoke('ssh:test-connection', profile),
 
   // Saved Sessions (overall layouts)
   getSessions: () => ipcRenderer.invoke('sessions:get-all'),
