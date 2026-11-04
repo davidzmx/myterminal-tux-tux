@@ -553,19 +553,34 @@ class TuxTerminalApp {
         const tabId = this.contextTargetTabId || this.activeTabId;
 
         this.hideTabContextMenu();
-        if (!tabId && action !== 'new-tab') return;
 
         switch (action) {
           case 'rename':
-            this.startRenamingTab(tabId);
+            if (tabId) this.startRenamingTab(tabId);
+            break;
+          case 'save-tab':
+            if (tabId) this.saveTabState(tabId);
+            break;
+          case 'load-tab':
+            this.openTabLayoutModal();
             break;
           case 'new-tab':
             this.createTab();
             break;
           case 'close-tab':
-            this.closeTab(tabId);
+            if (tabId) this.closeTab(tabId);
             break;
         }
+      });
+    }
+
+    const topBar = document.getElementById('top-bar');
+    if (topBar) {
+      topBar.addEventListener('contextmenu', (e) => {
+        if (e.target.closest('.app-brand') || e.target.closest('#top-actions') || e.target.closest('.tab-item')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.showTabContextMenu(e.clientX, e.clientY, null);
       });
     }
 
@@ -1016,8 +1031,20 @@ class TuxTerminalApp {
     this.contextTargetTabId = tabId;
     if (!this.tabContextMenu) return;
 
+    const renameItem = this.tabContextMenu.querySelector('[data-tab-action="rename"]');
+    const saveItem = this.tabContextMenu.querySelector('[data-tab-action="save-tab"]');
+    const closeItem = this.tabContextMenu.querySelector('[data-tab-action="close-tab"]');
+    const sep1 = document.getElementById('tab-menu-sep-1');
+    const sep2 = document.getElementById('tab-menu-sep-2');
+
+    if (renameItem) renameItem.classList.toggle('hidden', !tabId);
+    if (saveItem) saveItem.classList.toggle('hidden', !tabId);
+    if (closeItem) closeItem.classList.toggle('hidden', !tabId);
+    if (sep1) sep1.classList.toggle('hidden', !tabId);
+    if (sep2) sep2.classList.toggle('hidden', !tabId);
+
     this.tabContextMenu.style.left = `${Math.min(window.innerWidth - 180, x)}px`;
-    this.tabContextMenu.style.top = `${Math.min(window.innerHeight - 150, y)}px`;
+    this.tabContextMenu.style.top = `${Math.min(window.innerHeight - 200, y)}px`;
     this.tabContextMenu.classList.remove('hidden');
   }
 
@@ -1026,6 +1053,88 @@ class TuxTerminalApp {
       this.tabContextMenu.classList.add('hidden');
     }
     this.contextTargetTabId = null;
+  }
+
+  async saveTabState(tabId) {
+    const tab = this.tabs.find((t) => t.id === (tabId || this.activeTabId));
+    if (!tab) return;
+
+    const defaultName = tab.title || 'Pestaña';
+    const name = prompt('Nombre para guardar esta pestaña (con terminales, rutas y sesiones SSH):', defaultName);
+    if (!name || !name.trim()) return;
+
+    const cleanTree = await this.serializeTabTree(tab.tree);
+    const templateData = {
+      name: name.trim(),
+      title: tab.title,
+      layout: cleanTree,
+      savedAt: new Date().toISOString()
+    };
+
+    await window.api.saveTabTemplate(name.trim(), templateData);
+    alert(`Pestaña "${name.trim()}" guardada exitosamente.`);
+    if (this.modalTabLayout && !this.modalTabLayout.classList.contains('hidden')) {
+      await this.renderTabTemplatesList();
+    }
+  }
+
+  async serializeTabTree(node) {
+    if (node.type === 'terminal') {
+      const inst = this.terminals.get(node.id);
+      let cwd = null;
+      try {
+        cwd = await window.api.getTerminalCwd(node.id);
+      } catch (e) {
+        cwd = inst ? inst.cwd : null;
+      }
+
+      return {
+        type: 'terminal',
+        title: inst ? inst.title : (node.title || 'Terminal'),
+        shellPath: inst ? inst.shellPath : null,
+        cwd: cwd || null,
+        sshSession: inst ? inst.sshSession : null
+      };
+    }
+
+    return {
+      type: 'split',
+      orientation: node.orientation,
+      ratio: node.ratio || 0.5,
+      first: await this.serializeTabTree(node.first),
+      second: await this.serializeTabTree(node.second)
+    };
+  }
+
+  restoreSavedTab(templateData) {
+    const layout = templateData.layout || templateData.tree;
+    if (!layout) return;
+
+    const assignFreshIds = (node) => {
+      const id = (node.type === 'terminal' ? 'term_' : 'split_') + Math.random().toString(36).substring(2, 9);
+      if (node.type === 'terminal') {
+        return {
+          id,
+          type: 'terminal',
+          title: node.title || 'Terminal',
+          shellPath: node.shellPath || null,
+          cwd: node.cwd || null,
+          sshSession: node.sshSession || null
+        };
+      }
+      return {
+        id,
+        type: 'split',
+        orientation: node.orientation,
+        ratio: node.ratio || 0.5,
+        first: assignFreshIds(node.first),
+        second: assignFreshIds(node.second)
+      };
+    };
+
+    const freshTree = assignFreshIds(layout);
+    const tabTitle = templateData.title || templateData.name || 'Pestaña';
+    this.createTab(tabTitle, freshTree);
   }
 
   // ================= WORKSPACE SPLITS & TREE =================
@@ -2290,6 +2399,7 @@ class TuxTerminalApp {
         id: node.id,
         cols,
         rows,
+        cwd: node.cwd || null,
         shellPath: chosenShell,
         initialCommand: node.initialCommand || null
       });
@@ -2333,6 +2443,12 @@ class TuxTerminalApp {
       };
 
       this.terminals.set(node.id, termInfo);
+
+      if (node.sshSession) {
+        setTimeout(() => {
+          this.connectSshProfile(node.id, node.sshSession);
+        }, 350);
+      }
 
       const shellSelect = document.getElementById(`shell-select-${node.id}`);
       if (shellSelect) {
@@ -2891,12 +3007,17 @@ class TuxTerminalApp {
       return;
     }
 
+    const savedTabs = [];
+    for (const tab of this.tabs) {
+      savedTabs.push({
+        title: tab.title,
+        tree: await this.serializeTabTree(tab.tree)
+      });
+    }
+
     const sessionData = {
       activeTabTitle: this.tabs.find((t) => t.id === this.activeTabId)?.title,
-      tabs: this.tabs.map((tab) => ({
-        title: tab.title,
-        tree: this.cleanTreeForSerialization(tab.tree)
-      }))
+      tabs: savedTabs
     };
 
     await window.api.saveSession(name, sessionData);
@@ -2922,7 +3043,9 @@ class TuxTerminalApp {
           id,
           type: 'terminal',
           title: node.title || 'Terminal',
-          shellPath: node.shellPath || null
+          shellPath: node.shellPath || null,
+          cwd: node.cwd || null,
+          sshSession: node.sshSession || null
         };
       }
       return {
@@ -2941,21 +3064,26 @@ class TuxTerminalApp {
     });
   }
 
-  // ================= TAB LAYOUT TEMPLATES =================
+  // ================= TAB LAYOUT TEMPLATES & SAVED TABS =================
   async openTabLayoutModal() {
+    const tab = this.tabs.find((t) => t.id === this.activeTabId);
+    const input = document.getElementById('new-tab-template-name');
+    if (input && tab) {
+      input.value = tab.title || '';
+    }
     await this.renderTabTemplatesList();
     this.modalTabLayout.classList.remove('hidden');
   }
 
   async renderTabTemplatesList() {
     const container = document.getElementById('tab-templates-list');
-    container.innerHTML = '<div class="empty-msg">Cargando plantillas...</div>';
+    container.innerHTML = '<div class="empty-msg">Cargando pestañas guardadas...</div>';
 
     const templates = await window.api.getTabTemplates();
-    const templateKeys = Object.keys(templates);
+    const templateKeys = Object.keys(templates || {});
 
     if (templateKeys.length === 0) {
-      container.innerHTML = '<div class="empty-msg">No hay plantillas guardadas.</div>';
+      container.innerHTML = '<div class="empty-msg">No hay pestañas guardadas todavía. Haz clic derecho en una pestaña y selecciona "Guardar pestaña".</div>';
       return;
     }
 
@@ -2965,32 +3093,51 @@ class TuxTerminalApp {
       const row = document.createElement('div');
       row.className = 'saved-item-row';
 
+      // Count terminals & SSH
+      const countTerminals = (node) => {
+        if (!node) return { count: 0, ssh: 0 };
+        if (node.type === 'terminal') {
+          return { count: 1, ssh: node.sshSession ? 1 : 0 };
+        }
+        const f = countTerminals(node.first);
+        const s = countTerminals(node.second);
+        return { count: f.count + s.count, ssh: f.ssh + s.ssh };
+      };
+
+      const stats = countTerminals(tmpl.layout);
+      const sshText = stats.ssh > 0 ? ` • 🔑 ${stats.ssh} sesión(es) SSH` : '';
+      const dateText = tmpl.savedAt ? new Date(tmpl.savedAt).toLocaleDateString() : '';
+
       const info = document.createElement('div');
       info.innerHTML = `
-        <div class="saved-item-title">${tmpl.name}</div>
-        <div class="saved-item-meta">Disposición de splits para pestaña</div>
+        <div class="saved-item-title" style="font-weight:600; color:var(--text-main);">${tmpl.name || tmpl.title}</div>
+        <div class="saved-item-meta" style="font-size:11px; color:var(--text-muted);">${stats.count} terminal(es)${sshText} ${dateText ? '• Guardada el ' + dateText : ''}</div>
       `;
 
       const actions = document.createElement('div');
       actions.className = 'saved-item-actions';
+      actions.style.display = 'flex';
+      actions.style.gap = '6px';
 
-      const btnApply = document.createElement('button');
-      btnApply.className = 'btn btn-sm btn-primary';
-      btnApply.textContent = 'Aplicar a Pestaña';
-      btnApply.addEventListener('click', () => {
-        this.applyTemplateToCurrentTab(tmpl.layout);
+      const btnOpen = document.createElement('button');
+      btnOpen.className = 'btn btn-sm btn-primary';
+      btnOpen.innerHTML = '📂 Abrir Pestaña';
+      btnOpen.title = 'Abrir como una nueva pestaña con sus terminales, rutas y sesiones SSH';
+      btnOpen.addEventListener('click', () => {
+        this.restoreSavedTab(tmpl);
         this.modalTabLayout.classList.add('hidden');
       });
 
-      actions.appendChild(btnApply);
+      actions.appendChild(btnOpen);
 
       if (!['Single Terminal', '2 Terminals Vertical', '2 Terminals Horizontal', '4 Terminals (2x2 Grid)'].includes(tmpl.name)) {
         const btnDelete = document.createElement('button');
         btnDelete.className = 'btn btn-sm btn-danger';
         btnDelete.textContent = '✕';
+        btnDelete.title = 'Eliminar pestaña guardada';
         btnDelete.addEventListener('click', async () => {
-          if (confirm(`¿Eliminar la plantilla "${tmpl.name}"?`)) {
-            await window.api.deleteTabTemplate(tmpl.name);
+          if (confirm(`¿Eliminar la pestaña guardada "${tmpl.name || tmpl.title}"?`)) {
+            await window.api.deleteTabTemplate(tmpl.name || tmpl.title);
             this.renderTabTemplatesList();
           }
         });
@@ -3007,15 +3154,19 @@ class TuxTerminalApp {
     const input = document.getElementById('new-tab-template-name');
     const name = input.value.trim();
     if (!name) {
-      alert('Ingresa un nombre para la plantilla.');
+      alert('Ingresa un nombre para guardar la pestaña.');
       return;
     }
 
     const tab = this.tabs.find((t) => t.id === this.activeTabId);
     if (!tab) return;
 
+    const cleanTree = await this.serializeTabTree(tab.tree);
     const templateData = {
-      layout: this.cleanTreeForSerialization(tab.tree)
+      name: name,
+      title: tab.title || name,
+      layout: cleanTree,
+      savedAt: new Date().toISOString()
     };
 
     await window.api.saveTabTemplate(name, templateData);

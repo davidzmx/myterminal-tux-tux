@@ -542,6 +542,10 @@ function registerIpcHandlers() {
     return false;
   });
 
+  ipcMain.handle('terminal:get-cwd', (event, { id }) => {
+    return getPtyCwd(id);
+  });
+
   // Git
   ipcMain.handle('git:get-info', (event, { id }) => {
     const cwd = getPtyCwd(id);

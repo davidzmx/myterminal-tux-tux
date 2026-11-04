@@ -96,10 +96,17 @@
     <div class="menu-item" data-tab-action="rename">
       <span class="menu-icon">✏️</span> Renombrar pestaña
     </div>
-    <div class="menu-separator"></div>
+    <div class="menu-item" data-tab-action="save-tab">
+      <span class="menu-icon">💾</span> Guardar pestaña
+    </div>
+    <div class="menu-separator" id="tab-menu-sep-1"></div>
+    <div class="menu-item" data-tab-action="load-tab">
+      <span class="menu-icon">📂</span> Cargar pestaña
+    </div>
     <div class="menu-item" data-tab-action="new-tab">
       <span class="menu-icon">➕</span> Nueva pestaña
     </div>
+    <div class="menu-separator" id="tab-menu-sep-2"></div>
     <div class="menu-item danger" data-tab-action="close-tab">
       <span class="menu-icon">✕</span> Cerrar pestaña
     </div>
@@ -407,26 +414,26 @@
   <!-- Modal: Tab Layout Manager (Tab State & Templates) -->
   <div id="modal-tab-layout" class="modal hidden">
     <div class="modal-backdrop"></div>
-    <div class="modal-dialog">
+    <div class="modal-dialog" style="width: 580px; max-width: 95vw;">
       <div class="modal-header">
         <div class="modal-title">
-          <span class="modal-icon">📐</span> Disposición de la Pestaña Activa
+          <span class="modal-icon">📐</span> Guardar y Cargar Pestaña
         </div>
         <button class="modal-close" data-close-modal="modal-tab-layout">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-subtitle">Guarda la estructura de splits de esta pestaña o aplica una disposición prediseñada.</p>
+        <p class="modal-subtitle">Guarda el estado completo de tus pestañas (splits, rutas actuales de carpetas y sesiones SSH) para restaurarlas en cualquier momento.</p>
         
         <div class="save-box">
-          <label for="new-tab-template-name">Guardar estructura de esta pestaña como plantilla:</label>
+          <label for="new-tab-template-name">Guardar pestaña activa:</label>
           <div class="input-with-button">
-            <input type="text" id="new-tab-template-name" placeholder="Ej. 3 splits monitoring">
-            <button id="btn-save-tab-template" class="btn btn-primary">Guardar Plantilla</button>
+            <input type="text" id="new-tab-template-name" placeholder="Nombre para guardar la pestaña...">
+            <button id="btn-save-tab-template" class="btn btn-primary">💾 Guardar Pestaña</button>
           </div>
         </div>
 
         <div class="templates-list-container">
-          <h4>Plantillas y Disposiciones Disponibles</h4>
+          <h4>Pestañas y Plantillas Guardadas</h4>
           <div id="tab-templates-list" class="saved-items-list"></div>
         </div>
       </div>

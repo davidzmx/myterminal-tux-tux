@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   writeTerminal: (id, data) => ipcRenderer.send('terminal:write', { id, data }),
   resizeTerminal: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
   killTerminal: (id) => ipcRenderer.invoke('terminal:kill', { id }),
+  getTerminalCwd: (id) => ipcRenderer.invoke('terminal:get-cwd', { id }),
 
   // Data listeners
   onTerminalData: (id, callback) => {

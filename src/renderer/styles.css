@@ -570,10 +570,31 @@ body.theme-light .terminal-header.header-ssh {
   cursor: pointer;
   height: 24px;
   white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
-.tb-git-branch-btn:hover {
-  background-color: #d1ebd5;
+body.theme-dark .tb-git-branch-btn {
+  background-color: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #4ade80;
+}
+
+body.theme-dark .tb-git-branch-btn:hover {
+  background-color: rgba(34, 197, 94, 0.32);
+  border-color: #4ade80;
+  color: #86efac;
+}
+
+body.theme-light .tb-git-branch-btn {
+  background-color: #e6f4ea;
+  border-color: #34a853;
+  color: #137333;
+}
+
+body.theme-light .tb-git-branch-btn:hover {
+  background-color: #ceead6;
+  border-color: #1e8e3e;
+  color: #0d652d;
 }
 
 .tb-git-dropdown {
@@ -646,8 +667,20 @@ body.theme-dark .tb-git-user-btn {
   color: #60a5fa;
 }
 
+body.theme-dark .tb-git-user-btn:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #93c5fd;
+}
+
 body.theme-light .tb-git-user-btn {
   color: #1d4ed8;
+}
+
+body.theme-light .tb-git-user-btn:hover {
+  background-color: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
 }
 
 /* Git Action Buttons */
