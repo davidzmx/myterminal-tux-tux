@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('api', {
   // System & Application
   getHomeDir: () => ipcRenderer.invoke('system:get-home'),
   getSystemInfo: () => ipcRenderer.invoke('system:info'),
+  openExternal: (url) => ipcRenderer.invoke('system:open-external', url),
   onRequestClose: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('app:request-close', listener);

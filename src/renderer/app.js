@@ -300,6 +300,62 @@ class TuxTerminalApp {
       this.openTabLayoutModal();
     });
 
+    const btnAbout = document.getElementById('btn-about');
+    if (btnAbout) {
+      btnAbout.addEventListener('click', () => {
+        this.openSettingsModal('tab-about-opts');
+      });
+    }
+
+    const brandEl = document.querySelector('.app-brand');
+    if (brandEl) {
+      brandEl.addEventListener('click', () => {
+        this.openSettingsModal('tab-about-opts');
+      });
+    }
+
+    const repoUrl = 'https://github.com/davidzmx/myterminal-tux-tux';
+    const btnOpenRepo = document.getElementById('btn-open-repo');
+    if (btnOpenRepo) {
+      btnOpenRepo.addEventListener('click', () => {
+        if (window.api && window.api.openExternal) {
+          window.api.openExternal(repoUrl);
+        } else {
+          window.open(repoUrl, '_blank');
+        }
+      });
+    }
+
+    const repoLinkEl = document.getElementById('about-repo-link');
+    if (repoLinkEl) {
+      repoLinkEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (window.api && window.api.openExternal) {
+          window.api.openExternal(repoUrl);
+        } else {
+          window.open(repoUrl, '_blank');
+        }
+      });
+    }
+
+    const btnCopyRepo = document.getElementById('btn-copy-repo');
+    if (btnCopyRepo) {
+      btnCopyRepo.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(repoUrl);
+          const feedback = document.getElementById('about-copy-feedback');
+          if (feedback) {
+            feedback.classList.remove('hidden');
+            setTimeout(() => {
+              feedback.classList.add('hidden');
+            }, 3000);
+          }
+        } catch (err) {
+          console.error('Error al copiar repositorio:', err);
+        }
+      });
+    }
+
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const modalId = btn.getAttribute('data-close-modal');
@@ -1209,6 +1265,7 @@ class TuxTerminalApp {
 
     this.renderGitActionsConfig();
     this.renderFavoritesConfig();
+    this.renderAboutInfo();
 
     if (tabName) {
       document.querySelectorAll('.settings-nav-btn').forEach((b) => {
@@ -1220,6 +1277,44 @@ class TuxTerminalApp {
     }
 
     this.openModal(this.modalSettings);
+  }
+
+  async renderAboutInfo() {
+    try {
+      if (!window.api || !window.api.getSystemInfo) return;
+      const info = await window.api.getSystemInfo();
+      if (!info) return;
+
+      const appVer = info.version || '1.0.0';
+      const versionBadge = document.getElementById('about-version-badge');
+      if (versionBadge) versionBadge.textContent = `v${appVer}`;
+
+      const specVer = document.getElementById('about-spec-version');
+      if (specVer) specVer.textContent = appVer;
+
+      const specPlatform = document.getElementById('about-spec-platform');
+      if (specPlatform) specPlatform.textContent = info.platform || '-';
+
+      const specArch = document.getElementById('about-spec-arch');
+      if (specArch) specArch.textContent = info.arch || '-';
+
+      const specElectron = document.getElementById('about-spec-electron');
+      if (specElectron) specElectron.textContent = info.electronVersion || '-';
+
+      const specNode = document.getElementById('about-spec-node');
+      if (specNode) specNode.textContent = info.nodeVersion || '-';
+
+      const specChrome = document.getElementById('about-spec-chrome');
+      if (specChrome) specChrome.textContent = info.chromeVersion || '-';
+
+      const repoLink = document.getElementById('about-repo-link');
+      if (repoLink && info.repository) {
+        repoLink.textContent = info.repository;
+        repoLink.setAttribute('href', info.repository);
+      }
+    } catch (err) {
+      console.warn('No se pudo cargar información del sistema para Acerca de:', err);
+    }
   }
 
   async saveGeneralConfig() {

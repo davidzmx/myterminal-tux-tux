@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
   <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body class="theme-dark">
   <div id="app">
     <!-- Top Navigation Bar -->
@@ -34,6 +36,10 @@
           <span class="btn-icon">⚙️</span> Ajustes
         </button>
 
+        <button id="btn-about" class="top-btn" title="Acerca de MyTerminal Tux Tux">
+          <span class="btn-icon">ℹ️</span> Acerca de
+        </button>
+
         <button id="btn-global-sessions" class="top-btn" title="Guardar o Restaurar Sesión General">
           <span class="btn-icon">💾</span> Sesión
         </button>
@@ -54,7 +60,7 @@
     <!-- Status Bar -->
     <footer id="status-bar">
       <div id="status-info">
-        <span id="active-tab-info">Pestaña 1</span> • 
+        <span id="active-tab-info">Pestaña 1</span> •
         <span id="active-term-info">Terminal activa: Ninguna</span>
       </div>
       <div class="shortcuts-hint">
@@ -66,10 +72,16 @@
   <!-- Custom Context Menu for Terminals -->
   <div id="context-menu" class="context-menu hidden">
     <div class="menu-item" data-action="split-h">
-      <span class="menu-icon"><svg class="split-icon" width="14" height="14" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="4.5" rx="1"/><rect x="1" y="9.5" width="14" height="4.5" rx="1"/></svg></span> Dividir horizontalmente
+      <span class="menu-icon"><svg class="split-icon" width="14" height="14" viewBox="0 0 16 16">
+          <rect x="1" y="2" width="14" height="4.5" rx="1" />
+          <rect x="1" y="9.5" width="14" height="4.5" rx="1" />
+        </svg></span> Dividir horizontalmente
     </div>
     <div class="menu-item" data-action="split-v">
-      <span class="menu-icon"><svg class="split-icon" width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="1" width="4.5" height="14" rx="1"/><rect x="9.5" y="1" width="4.5" height="14" rx="1"/></svg></span> Dividir verticalmente
+      <span class="menu-icon"><svg class="split-icon" width="14" height="14" viewBox="0 0 16 16">
+          <rect x="2" y="1" width="4.5" height="14" rx="1" />
+          <rect x="9.5" y="1" width="4.5" height="14" rx="1" />
+        </svg></span> Dividir verticalmente
     </div>
     <div class="menu-separator"></div>
     <div class="menu-item has-submenu" id="ctx-ssh-profiles-item">
@@ -119,7 +131,7 @@
     <div class="modal-dialog">
       <div class="modal-header">
         <div class="modal-title">
-          <span class="modal-icon" id="edit-git-modal-icon">✏️</span> 
+          <span class="modal-icon" id="edit-git-modal-icon">✏️</span>
           <span id="edit-git-modal-title">Editar Acción</span>
         </div>
         <button class="modal-close" data-close-modal="modal-edit-git-action">&times;</button>
@@ -127,7 +139,7 @@
       <div class="modal-body">
         <form id="edit-git-action-form">
           <input type="hidden" id="edit-git-action-id" value="">
-          
+
           <div class="form-group">
             <label for="edit-git-action-label">Nombre / Etiqueta del botón *</label>
             <input type="text" id="edit-git-action-label" required placeholder="Ej: Status, Top, Logs, Docker Up...">
@@ -139,7 +151,8 @@
             <input type="text" id="edit-git-action-cmd" required placeholder="Ej: git status, top, docker ps, df -h...">
             <small class="form-hint">
               Puedes usar <code>{prompt:Pregunta}</code> para solicitar datos interactivos al usuario.<br>
-              Ejemplo: <code>git commit -m "{prompt:Mensaje}"</code> o <code>docker logs --tail 50 -f {prompt:Contenedor}</code>
+              Ejemplo: <code>git commit -m "{prompt:Mensaje}"</code> o
+              <code>docker logs --tail 50 -f {prompt:Contenedor}</code>
             </small>
           </div>
 
@@ -158,7 +171,7 @@
     <div class="modal-dialog" style="max-width: 480px;">
       <div class="modal-header">
         <div class="modal-title">
-          <span class="modal-icon" id="edit-group-modal-icon">📁</span> 
+          <span class="modal-icon" id="edit-group-modal-icon">📁</span>
           <span id="edit-group-modal-title">Nuevo Grupo de Botones</span>
         </div>
         <button class="modal-close" data-close-modal="modal-edit-button-group">&times;</button>
@@ -169,7 +182,8 @@
           <div class="form-row">
             <div class="form-group flex-1">
               <label for="edit-group-icon">Icono / Emoji</label>
-              <input type="text" id="edit-group-icon" placeholder="Ej. 💻" value="⚡" style="text-align:center; font-size:16px;">
+              <input type="text" id="edit-group-icon" placeholder="Ej. 💻" value="⚡"
+                style="text-align:center; font-size:16px;">
             </div>
             <div class="form-group flex-3">
               <label for="edit-group-name">Nombre del Grupo *</label>
@@ -178,7 +192,8 @@
           </div>
 
           <div class="form-group" style="margin-top: -4px;">
-            <label style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px; display: block;">Iconos sugeridos (haz clic para elegir o escribe uno personalizado):</label>
+            <label style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px; display: block;">Iconos
+              sugeridos (haz clic para elegir o escribe uno personalizado):</label>
             <div id="icon-picker-palette" class="icon-picker-grid">
               <!-- Preset icons populated dynamically -->
             </div>
@@ -241,6 +256,7 @@
           <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Grupos y Botones de Comandos</button>
           <button class="settings-nav-btn" data-settings-tab="tab-fav-opts">Carpetas Favoritas</button>
           <button class="settings-nav-btn" data-settings-tab="tab-backup-opts">Copia de Seguridad & Migración</button>
+          <button class="settings-nav-btn" data-settings-tab="tab-about-opts">Acerca de</button>
         </div>
 
         <!-- Section 1: General Options -->
@@ -257,16 +273,20 @@
             <div class="form-group">
               <label for="cfg-ssh-color">Color de barra en conexión SSH</label>
               <div style="display:flex; align-items:center; gap:10px;">
-                <input type="color" id="cfg-ssh-color" value="#b91c1c" style="width:48px; height:32px; padding:2px; border:1px solid var(--border-color); border-radius:4px; cursor:pointer; background:var(--input-bg);">
-                <span id="cfg-ssh-color-code" style="font-family:monospace; font-size:12px; color:var(--text-main);">#b91c1c (Rojo)</span>
+                <input type="color" id="cfg-ssh-color" value="#b91c1c"
+                  style="width:48px; height:32px; padding:2px; border:1px solid var(--border-color); border-radius:4px; cursor:pointer; background:var(--input-bg);">
+                <span id="cfg-ssh-color-code"
+                  style="font-family:monospace; font-size:12px; color:var(--text-main);">#b91c1c (Rojo)</span>
               </div>
-              <small class="form-hint">Color de acento que tomarán la barra de la terminal y la pestaña al conectarse a un SSH remoto.</small>
+              <small class="form-hint">Color de acento que tomarán la barra de la terminal y la pestaña al conectarse a
+                un SSH remoto.</small>
             </div>
 
             <div class="form-group">
               <label for="cfg-default-shell">Terminal / Shell por Defecto</label>
               <select id="cfg-default-shell"></select>
-              <small class="form-hint">En Linux la predeterminada es Bash (/bin/bash). Puedes cambiarla por cualquier otra shell instalada.</small>
+              <small class="form-hint">En Linux la predeterminada es Bash (/bin/bash). Puedes cambiarla por cualquier
+                otra shell instalada.</small>
             </div>
 
             <div class="form-group">
@@ -304,8 +324,10 @@
         <div id="tab-git-opts" class="settings-tab-pane">
           <div class="git-actions-header">
             <div>
-              <p class="modal-subtitle" style="margin-bottom: 4px;">Configura grupos de botones para Git, Sistema, Docker o cualquier aplicación con comandos de un solo clic.</p>
-              <small class="form-hint" style="margin-top:0;">Selecciona un grupo para editar sus botones o añade nuevos grupos y comandos del sistema.</small>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Configura grupos de botones para Git, Sistema,
+                Docker o cualquier aplicación con comandos de un solo clic.</p>
+              <small class="form-hint" style="margin-top:0;">Selecciona un grupo para editar sus botones o añade nuevos
+                grupos y comandos del sistema.</small>
             </div>
             <div class="git-actions-top-btns">
               <button type="button" id="btn-reset-git-actions" class="btn btn-sm">↺ Restaurar Predeterminados</button>
@@ -313,12 +335,17 @@
           </div>
 
           <!-- Group Selector & Manager Bar -->
-          <div class="button-group-manager-bar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-dark); padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; margin-bottom:10px;">
+          <div class="button-group-manager-bar"
+            style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-dark); padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; margin-bottom:10px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <label for="cfg-button-group-select" style="font-weight:600; font-size:12px; margin:0; color:var(--text-main);">Grupo activo:</label>
-              <select id="cfg-button-group-select" class="form-control" style="height:28px; font-weight:600; padding:2px 8px; font-size:12px; border-radius:4px; min-width:170px; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);"></select>
-              <button type="button" id="btn-group-move-up" class="btn btn-sm" title="Mover grupo hacia arriba">⬆️</button>
-              <button type="button" id="btn-group-move-down" class="btn btn-sm" title="Mover grupo hacia abajo">⬇️</button>
+              <label for="cfg-button-group-select"
+                style="font-weight:600; font-size:12px; margin:0; color:var(--text-main);">Grupo activo:</label>
+              <select id="cfg-button-group-select" class="form-control"
+                style="height:28px; font-weight:600; padding:2px 8px; font-size:12px; border-radius:4px; min-width:170px; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);"></select>
+              <button type="button" id="btn-group-move-up" class="btn btn-sm"
+                title="Mover grupo hacia arriba">⬆️</button>
+              <button type="button" id="btn-group-move-down" class="btn btn-sm"
+                title="Mover grupo hacia abajo">⬇️</button>
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
               <button type="button" id="btn-add-group" class="btn btn-sm">+ Nuevo Grupo</button>
@@ -328,22 +355,30 @@
           </div>
 
           <!-- Automatic Group Switching Configuration -->
-          <div style="background: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div
+            style="background: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div
+              style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <label for="cfg-default-non-git-group" style="font-weight: 600; font-size: 12px; color: var(--text-main); margin: 0;">Grupo por defecto fuera de Git:</label>
-                <select id="cfg-default-non-git-group" class="form-control" style="height: 28px; font-weight: 600; font-size: 12px; border-radius: 4px; padding: 2px 8px; min-width: 170px; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border-color);"></select>
+                <label for="cfg-default-non-git-group"
+                  style="font-weight: 600; font-size: 12px; color: var(--text-main); margin: 0;">Grupo por defecto fuera
+                  de Git:</label>
+                <select id="cfg-default-non-git-group" class="form-control"
+                  style="height: 28px; font-weight: 600; font-size: 12px; border-radius: 4px; padding: 2px 8px; min-width: 170px; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border-color);"></select>
               </div>
-              <label style="font-weight: 500; font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
+              <label
+                style="font-weight: 500; font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
                 <input type="checkbox" id="cfg-auto-switch-git" checked style="cursor: pointer;">
                 <span>Activar grupo Git automáticamente al entrar a un repositorio</span>
               </label>
             </div>
-            <small class="form-hint" style="margin: 0;">En carpetas que no son repositorios Git se usará el grupo seleccionado (por defecto Sistema), y al entrar a un repositorio se activará el grupo Git.</small>
+            <small class="form-hint" style="margin: 0;">En carpetas que no son repositorios Git se usará el grupo
+              seleccionado (por defecto Sistema), y al entrar a un repositorio se activará el grupo Git.</small>
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <span style="font-size:12px; font-weight:600; color:var(--text-main);" id="cfg-group-actions-title">Botones del grupo:</span>
+            <span style="font-size:12px; font-weight:600; color:var(--text-main);" id="cfg-group-actions-title">Botones
+              del grupo:</span>
             <button type="button" id="btn-add-git-action" class="btn btn-sm btn-primary">+ Nueva Acción</button>
           </div>
 
@@ -367,11 +402,14 @@
         <div id="tab-fav-opts" class="settings-tab-pane">
           <div class="git-actions-header">
             <div>
-              <p class="modal-subtitle" style="margin-bottom: 4px;">Gestiona tus carpetas y rutas favoritas para navegar con un solo clic.</p>
-              <small class="form-hint" style="margin-top:0;">Puedes agregar, reordenar, editar o eliminar accesos rápidos a carpetas del sistema.</small>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Gestiona tus carpetas y rutas favoritas para navegar
+                con un solo clic.</p>
+              <small class="form-hint" style="margin-top:0;">Puedes agregar, reordenar, editar o eliminar accesos
+                rápidos a carpetas del sistema.</small>
             </div>
             <div class="git-actions-top-btns">
-              <button type="button" id="btn-add-favorite-setting" class="btn btn-sm btn-primary">+ Nueva Carpeta</button>
+              <button type="button" id="btn-add-favorite-setting" class="btn btn-sm btn-primary">+ Nueva
+                Carpeta</button>
             </div>
           </div>
 
@@ -394,31 +432,42 @@
         <div id="tab-backup-opts" class="settings-tab-pane">
           <div class="git-actions-header">
             <div>
-              <p class="modal-subtitle" style="margin-bottom: 4px;">Exporta o importa toda tu configuración para respaldarla o transferirla a otra computadora.</p>
-              <small class="form-hint" style="margin-top:0;">Permite migrar entre computadoras o crear respaldos completos de todo el entorno de trabajo.</small>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Exporta o importa toda tu configuración para
+                respaldarla o transferirla a otra computadora.</p>
+              <small class="form-hint" style="margin-top:0;">Permite migrar entre computadoras o crear respaldos
+                completos de todo el entorno de trabajo.</small>
             </div>
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
-            <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px;">
-              <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+            <div
+              style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px;">
+              <h4
+                style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
                 <span>📦</span> Copia de Seguridad Rápida (Recomendado)
               </h4>
               <p style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-                Genera un único archivo <code>.json</code> portátil. Puedes llevarlo a otra computadora con MyTerminal Tux Tux e importarlo con un clic para dejar todo exactamente igual.
+                Genera un único archivo <code>.json</code> portátil. Puedes llevarlo a otra computadora con MyTerminal
+                Tux Tux e importarlo con un clic para dejar todo exactamente igual.
               </p>
 
               <!-- Detailed list of what is packaged -->
-              <div style="background: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; margin-bottom: 14px;">
-                <div style="font-weight: 600; font-size: 12px; color: var(--text-main); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <div
+                style="background: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; margin-bottom: 14px;">
+                <div
+                  style="font-weight: 600; font-size: 12px; color: var(--text-main); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
                   <span>📋</span> ¿Qué se empaqueta en la exportación?
                 </div>
                 <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: var(--text-muted); line-height: 1.6;">
-                  <li><b>Configuración General:</b> Tema (claro/oscuro), fuentes, tamaño de texto, líneas de historial (scrollback), color de barra SSH y opciones de terminal.</li>
-                  <li><b>Grupos y Botones de Comandos:</b> Todos los grupos (Git, Sistema, etc.), sus botones, etiquetas, comandos personalizados y parámetros interactivos.</li>
-                  <li><b>Perfiles SSH:</b> Todos los servidores remotos guardados (hosts, puertos, usuarios, contraseñas de autologin y rutas de llaves).</li>
+                  <li><b>Configuración General:</b> Tema (claro/oscuro), fuentes, tamaño de texto, líneas de historial
+                    (scrollback), color de barra SSH y opciones de terminal.</li>
+                  <li><b>Grupos y Botones de Comandos:</b> Todos los grupos (Git, Sistema, etc.), sus botones,
+                    etiquetas, comandos personalizados y parámetros interactivos.</li>
+                  <li><b>Perfiles SSH:</b> Todos los servidores remotos guardados (hosts, puertos, usuarios, contraseñas
+                    de autologin y rutas de llaves).</li>
                   <li><b>Carpetas Favoritas:</b> La lista completa de directorios y accesos rápidos guardados.</li>
-                  <li><b>Plantillas y Sesiones:</b> Disposiciones de terminales guardadas y plantillas de pestañas listas para restaurar.</li>
+                  <li><b>Plantillas y Sesiones:</b> Disposiciones de terminales guardadas y plantillas de pestañas
+                    listas para restaurar.</li>
                 </ul>
               </div>
 
@@ -430,22 +479,122 @@
                   📥 Importar configuración...
                 </button>
               </div>
-              <div id="backup-status-msg" class="hidden" style="margin-top: 12px; padding: 8px 12px; border-radius: 4px; font-size: 12px;"></div>
+              <div id="backup-status-msg" class="hidden"
+                style="margin-top: 12px; padding: 8px 12px; border-radius: 4px; font-size: 12px;"></div>
             </div>
 
-            <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px;">
-              <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+            <div
+              style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px;">
+              <h4
+                style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
                 <span>📂</span> Opción Manual / Sistema de Archivos
               </h4>
               <p style="margin: 0 0 8px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-                Si prefieres copiar la configuración directamente entre discos o por red sin abrir el programa, todos los datos residen en la siguiente carpeta de tu usuario:
+                Si prefieres copiar la configuración directamente entre discos o por red sin abrir el programa, todos
+                los datos residen en la siguiente carpeta de tu usuario:
               </p>
-              <div style="background: var(--bg-dark); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--accent-cyan); word-break: break-all; margin-bottom: 8px;" id="backup-folder-path">
+              <div
+                style="background: var(--bg-dark); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--accent-cyan); word-break: break-all; margin-bottom: 8px;"
+                id="backup-folder-path">
                 ~/.config/myterminal-tux-tux/
               </div>
               <small class="form-hint" style="margin: 0;">
-                Solo copia los archivos <code>config.json</code>, <code>ssh-profiles.json</code>, <code>sessions.json</code> y <code>tab-templates.json</code> a la misma ruta en la otra computadora.
+                Solo copia los archivos <code>config.json</code>, <code>ssh-profiles.json</code>,
+                <code>sessions.json</code> y <code>tab-templates.json</code> a la misma ruta en la otra computadora.
               </small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 5: About (Acerca de) -->
+        <div id="tab-about-opts" class="settings-tab-pane">
+          <div class="about-container">
+            <div class="about-header">
+              <img src="icon.png" alt="Logo Tux Tux" class="about-logo" />
+              <div class="about-header-text">
+                <div class="about-title-row">
+                  <h3 class="about-app-title">MyTerminal Tux Tux</h3>
+                  <span class="about-version-badge" id="about-version-badge">v1.0.0</span>
+                </div>
+                <p class="about-subtitle">Emulador de terminal avanzado, configurable y multiplataforma</p>
+              </div>
+            </div>
+
+            <p class="about-description">
+              Diseñado con arquitectura de divisiones dinámicas al estilo Terminator, pestañas independientes,
+              integración inteligente con Git, gestor de perfiles SSH con autologin y un potente sistema de respaldo y
+              migración multiplataforma.
+            </p>
+
+            <!-- Repository Card -->
+            <div class="about-card highlight">
+              <div class="about-card-title">
+                <span class="about-card-icon">🐙</span>
+                <span>Repositorio en GitHub & Código Fuente</span>
+              </div>
+              <p class="about-card-desc">
+                MyTerminal Tux Tux es software libre bajo licencia <b>MIT</b>. Puedes explorar el código, reportar
+                errores o descargar las últimas versiones compiladas directamente desde el repositorio:
+              </p>
+              <div class="about-repo-box">
+                <div class="about-repo-url-wrapper">
+                  <span class="about-repo-icon">🔗</span>
+                  <a href="#" id="about-repo-link" class="about-repo-link" title="Abrir repositorio en el navegador">
+                    https://github.com/davidzmx/myterminal-tux-tux
+                  </a>
+                </div>
+                <div class="about-repo-actions">
+                  <button type="button" id="btn-open-repo" class="btn btn-primary"
+                    title="Abrir en el navegador predeterminado">
+                    🌐 Abrir en navegador
+                  </button>
+                  <button type="button" id="btn-copy-repo" class="btn btn-secondary"
+                    title="Copiar enlace al portapapeles">
+                    📋 Copiar enlace
+                  </button>
+                </div>
+              </div>
+              <div id="about-copy-feedback" class="about-copy-feedback hidden">✓ Enlace copiado al portapapeles</div>
+            </div>
+
+            <!-- Specs Grid -->
+            <div class="about-card">
+              <div class="about-card-title">
+                <span class="about-card-icon">ℹ️</span>
+                <span>Información del Sistema y Entorno</span>
+              </div>
+              <div class="about-specs-grid">
+                <div class="about-spec-item">
+                  <span class="about-spec-label">Versión de Tux Tux</span>
+                  <span class="about-spec-val" id="about-spec-version">1.0.0</span>
+                </div>
+                <div class="about-spec-item">
+                  <span class="about-spec-label">Plataforma</span>
+                  <span class="about-spec-val" id="about-spec-platform">-</span>
+                </div>
+                <div class="about-spec-item">
+                  <span class="about-spec-label">Arquitectura</span>
+                  <span class="about-spec-val" id="about-spec-arch">-</span>
+                </div>
+                <div class="about-spec-item">
+                  <span class="about-spec-label">Electron</span>
+                  <span class="about-spec-val" id="about-spec-electron">-</span>
+                </div>
+                <div class="about-spec-item">
+                  <span class="about-spec-label">Node.js</span>
+                  <span class="about-spec-val" id="about-spec-node">-</span>
+                </div>
+                <div class="about-spec-item">
+                  <span class="about-spec-label">Chromium</span>
+                  <span class="about-spec-val" id="about-spec-chrome">-</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer / Credits -->
+            <div class="about-credits">
+              <span>Desarrollado con IA para uso personal • El software y código se proporciona 'tal cual' (as is) sin
+                garantías de ningún tipo • Distribuido bajo Licencia <b>MIT</b></span>
             </div>
           </div>
         </div>
@@ -506,7 +655,7 @@
           <h3 id="ssh-form-title">Editar Perfil</h3>
           <form id="ssh-profile-form">
             <input type="hidden" id="ssh-id" value="">
-            
+
             <div class="form-group">
               <label for="ssh-name">Nombre del Perfil *</label>
               <input type="text" id="ssh-name" required placeholder="Ej. Servidor Producción Web">
@@ -541,7 +690,8 @@
               <label for="ssh-password">Contraseña SSH (Se recordará para autoconectar)</label>
               <div class="password-input-wrapper">
                 <input type="password" id="ssh-password" placeholder="Escribe tu contraseña para guardarla">
-                <button type="button" id="btn-toggle-ssh-pwd" class="btn-toggle-pwd" title="Mostrar/Ocultar contraseña">👁️</button>
+                <button type="button" id="btn-toggle-ssh-pwd" class="btn-toggle-pwd"
+                  title="Mostrar/Ocultar contraseña">👁️</button>
               </div>
             </div>
 
@@ -555,7 +705,8 @@
               <label for="ssh-passphrase">Frase de paso (Passphrase de la llave, si aplica)</label>
               <div class="password-input-wrapper">
                 <input type="password" id="ssh-passphrase" placeholder="Passphrase de la llave privada">
-                <button type="button" id="btn-toggle-ssh-phrase" class="btn-toggle-pwd" title="Mostrar/Ocultar">👁️</button>
+                <button type="button" id="btn-toggle-ssh-phrase" class="btn-toggle-pwd"
+                  title="Mostrar/Ocultar">👁️</button>
               </div>
             </div>
 
@@ -567,9 +718,11 @@
             <div class="form-actions">
               <button type="button" id="btn-ssh-delete" class="btn btn-danger hidden">Eliminar</button>
               <div class="form-actions-right">
-                <button type="button" id="btn-ssh-test" class="btn btn-secondary" title="Probar conexión con este host y credenciales">⚡ Probar Conexión</button>
+                <button type="button" id="btn-ssh-test" class="btn btn-secondary"
+                  title="Probar conexión con este host y credenciales">⚡ Probar Conexión</button>
                 <button type="submit" class="btn btn-primary">Guardar Perfil</button>
-                <button type="button" id="btn-ssh-connect-active" class="btn btn-success">Conectar en Terminal Activa</button>
+                <button type="button" id="btn-ssh-connect-active" class="btn btn-success">Conectar en Terminal
+                  Activa</button>
               </div>
             </div>
             <div id="ssh-test-result" class="ssh-test-result-box hidden"></div>
@@ -590,8 +743,9 @@
         <button class="modal-close" data-close-modal="modal-session">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-subtitle">Guarda todas las pestañas abiertas y la disposición completa de terminales para restaurarlas en cualquier momento.</p>
-        
+        <p class="modal-subtitle">Guarda todas las pestañas abiertas y la disposición completa de terminales para
+          restaurarlas en cualquier momento.</p>
+
         <div class="save-box">
           <label for="new-session-name">Guardar sesión actual:</label>
           <div class="input-with-button">
@@ -621,8 +775,9 @@
         <button class="modal-close" data-close-modal="modal-tab-layout">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-subtitle">Guarda el estado completo de tus pestañas (splits, rutas actuales de carpetas y sesiones SSH) para restaurarlas en cualquier momento.</p>
-        
+        <p class="modal-subtitle">Guarda el estado completo de tus pestañas (splits, rutas actuales de carpetas y
+          sesiones SSH) para restaurarlas en cualquier momento.</p>
+
         <div class="save-box">
           <label for="new-tab-template-name">Guardar pestaña activa:</label>
           <div class="input-with-button">
@@ -657,16 +812,20 @@
           ¿Cómo deseas conectar al perfil <b id="ssh-switch-target-name" style="color:var(--accent-yellow)">...</b>?
         </p>
         <div style="display: flex; flex-direction: column; gap: 8px;">
-          <button type="button" id="btn-ssh-switch-replace" class="btn btn-primary" style="justify-content: flex-start; padding: 9px 12px;">
+          <button type="button" id="btn-ssh-switch-replace" class="btn btn-primary"
+            style="justify-content: flex-start; padding: 9px 12px;">
             🔄 Desconectar actual y conectar en esta consola
           </button>
-          <button type="button" id="btn-ssh-switch-split" class="btn btn-secondary" style="justify-content: flex-start; padding: 9px 12px;">
+          <button type="button" id="btn-ssh-switch-split" class="btn btn-secondary"
+            style="justify-content: flex-start; padding: 9px 12px;">
             ❚❚ Abrir al lado en nueva terminal (Dividir)
           </button>
-          <button type="button" id="btn-ssh-switch-tab" class="btn btn-secondary" style="justify-content: flex-start; padding: 9px 12px;">
+          <button type="button" id="btn-ssh-switch-tab" class="btn btn-secondary"
+            style="justify-content: flex-start; padding: 9px 12px;">
             📄 Abrir en una nueva pestaña
           </button>
-          <button type="button" class="btn btn-secondary" data-close-modal="modal-ssh-switch" style="justify-content: flex-start; padding: 9px 12px; margin-top: 4px;">
+          <button type="button" class="btn btn-secondary" data-close-modal="modal-ssh-switch"
+            style="justify-content: flex-start; padding: 9px 12px; margin-top: 4px;">
             ✕ Cancelar
           </button>
         </div>
@@ -690,11 +849,14 @@
         </div>
 
         <div id="exit-ssh-warning" class="hidden" style="margin-bottom: 16px;">
-          <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 12px;">
-            <div style="font-weight: 600; color: #ef4444; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+          <div
+            style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 12px;">
+            <div
+              style="font-weight: 600; color: #ef4444; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px;">
               <span>⚠️</span> Hay sesiones SSH activas que se desconectarán:
             </div>
-            <ul id="exit-ssh-list" style="margin: 0 0 10px 18px; padding: 0; font-size: 12px; color: var(--text-main); line-height: 1.6;">
+            <ul id="exit-ssh-list"
+              style="margin: 0 0 10px 18px; padding: 0; font-size: 12px; color: var(--text-main); line-height: 1.6;">
             </ul>
             <p style="margin: 0; font-size: 11px; color: var(--text-muted);">
               Al salir se cerrarán estas conexiones de forma segura. ¿Deseas desconectar y salir de todas formas?
@@ -721,20 +883,24 @@
         <button class="modal-close" data-close-modal="modal-confirm-close-terminal">&times;</button>
       </div>
       <div class="modal-body" style="padding-top: 10px;">
-        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 16px;">
-          <div style="font-weight: 600; color: #ef4444; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+        <div
+          style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+          <div
+            style="font-weight: 600; color: #ef4444; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px;">
             <span>⚠️</span> Esta terminal tiene una conexión SSH activa
           </div>
           <div id="close-term-ssh-info" style="font-size: 12px; color: var(--text-main); margin-bottom: 8px;">
             <!-- SSH session details injected here -->
           </div>
           <p style="margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.5;">
-            Al cerrar esta terminal se desconectará la sesión remota de forma segura. ¿Deseas desconectar y cerrar la terminal?
+            Al cerrar esta terminal se desconectará la sesión remota de forma segura. ¿Deseas desconectar y cerrar la
+            terminal?
           </p>
         </div>
 
         <div class="form-actions" style="margin-top: 10px; justify-content: flex-end; gap: 8px;">
-          <button type="button" class="btn" id="btn-cancel-close-terminal" data-close-modal="modal-confirm-close-terminal">Cancelar</button>
+          <button type="button" class="btn" id="btn-cancel-close-terminal"
+            data-close-modal="modal-confirm-close-terminal">Cancelar</button>
           <button type="button" class="btn btn-danger" id="btn-confirm-close-terminal">✕ Desconectar y Cerrar</button>
         </div>
       </div>
@@ -755,8 +921,12 @@
         <form id="git-commit-form">
           <div class="form-group">
             <label for="git-commit-msg">Mensaje del Commit *</label>
-            <textarea id="git-commit-msg" rows="3" placeholder="Ej. feat: agregar nueva funcionalidad..." style="width:100%; font-family:inherit; font-size:12px; resize:vertical; padding:8px; border-radius:4px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-main);" required></textarea>
-            <small class="form-hint">Tip: Presiona <kbd style="background:var(--bg-hover); padding:1px 5px; border-radius:3px;">Ctrl + Enter</kbd> para ejecutar el commit directamente.</small>
+            <textarea id="git-commit-msg" rows="3" placeholder="Ej. feat: agregar nueva funcionalidad..."
+              style="width:100%; font-family:inherit; font-size:12px; resize:vertical; padding:8px; border-radius:4px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-main);"
+              required></textarea>
+            <small class="form-hint">Tip: Presiona <kbd
+                style="background:var(--bg-hover); padding:1px 5px; border-radius:3px;">Ctrl + Enter</kbd> para ejecutar
+              el commit directamente.</small>
           </div>
 
           <div class="form-group" style="margin-top: 10px;">
@@ -764,7 +934,8 @@
               <label style="font-weight:600; margin:0;">Archivos para agregar al commit:</label>
               <div class="git-files-actions">
                 <button type="button" class="git-files-btn-link" id="git-commit-select-all">✓ Seleccionar todos</button>
-                <button type="button" class="git-files-btn-link" id="git-commit-deselect-all">✕ Deseleccionar todos</button>
+                <button type="button" class="git-files-btn-link" id="git-commit-deselect-all">✕ Deseleccionar
+                  todos</button>
               </div>
             </div>
             <div id="git-commit-staged-banner" class="git-staged-info-banner hidden"></div>
@@ -818,7 +989,8 @@
               <label style="font-weight:600; margin:0;">Archivos pendientes:</label>
               <div class="git-files-actions">
                 <button type="button" class="git-files-btn-link" id="git-add-select-all">✓ Seleccionar todos</button>
-                <button type="button" class="git-files-btn-link" id="git-add-deselect-all">✕ Deseleccionar todos</button>
+                <button type="button" class="git-files-btn-link" id="git-add-deselect-all">✕ Deseleccionar
+                  todos</button>
               </div>
             </div>
             <div id="git-add-files-list" class="git-files-box">
@@ -866,8 +1038,10 @@
             <div class="git-files-header">
               <label style="font-weight:600; margin:0;">Archivos preparados (Staged):</label>
               <div class="git-files-actions">
-                <button type="button" class="git-files-btn-link" id="git-unstage-select-all">✓ Seleccionar todos</button>
-                <button type="button" class="git-files-btn-link" id="git-unstage-deselect-all">✕ Deseleccionar todos</button>
+                <button type="button" class="git-files-btn-link" id="git-unstage-select-all">✓ Seleccionar
+                  todos</button>
+                <button type="button" class="git-files-btn-link" id="git-unstage-deselect-all">✕ Deseleccionar
+                  todos</button>
               </div>
             </div>
             <div id="git-unstage-files-list" class="git-files-box">
@@ -902,4 +1076,5 @@
   <script src="../../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>

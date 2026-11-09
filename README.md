@@ -120,28 +120,5 @@ El repositorio incluye un flujo de trabajo en `.github/workflows/build-and-relea
 
 ---
 
-## 🚀 Subir a tu Repositorio de GitHub
-
-Si vas a subir este proyecto a un nuevo repositorio de GitHub:
-
-```bash
-# 1. Enlazar con tu repositorio remoto de GitHub (sustituye TU_USUARIO y TU_REPOSITORIO):
-git remote add origin https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-
-# 2. Asegurarte de que la rama principal se llame main:
-git branch -M main
-
-# 3. Subir todos los commits y etiquetas:
-git push -u origin main
-```
-
-Para generar una versión oficial de lanzamiento con todos los instaladores:
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
----
-
 ## 🐧 Licencia
-MIT License - Desarrollado para **MyTerminal Tux Tux**.
+MIT License - El software y código se proporciona 'tal cual' (as is) sin garantías de ningún tipo.- Desarrollado con IA para uso personal.

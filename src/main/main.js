@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -1193,11 +1193,25 @@ function registerIpcHandlers() {
 
   ipcMain.handle('system:info', () => {
     return {
+      name: app.getName(),
+      version: app.getVersion(),
+      electronVersion: process.versions.electron,
+      chromeVersion: process.versions.chrome,
+      nodeVersion: process.versions.node,
       platform: process.platform,
       arch: process.arch,
       homedir: os.homedir(),
-      username: os.userInfo().username
+      username: os.userInfo().username,
+      repository: 'https://github.com/davidzmx/myterminal-tux-tux'
     };
+  });
+
+  ipcMain.handle('system:open-external', async (event, url) => {
+    if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      await shell.openExternal(url);
+      return true;
+    }
+    return false;
   });
 }
 
