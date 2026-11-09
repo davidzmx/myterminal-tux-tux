@@ -54,6 +54,18 @@ contextBridge.exposeInMainWorld('api', {
   saveTabTemplate: (name, templateData) => ipcRenderer.invoke('tab-templates:save', { name, templateData }),
   deleteTabTemplate: (name) => ipcRenderer.invoke('tab-templates:delete', name),
 
+  // Google Drive Cloud Sync
+  gdrive: {
+    getStatus: () => ipcRenderer.invoke('gdrive:get-status'),
+    importCredentials: (customPath) => ipcRenderer.invoke('gdrive:import-client-credentials', customPath),
+    login: () => ipcRenderer.invoke('gdrive:login'),
+    logout: () => ipcRenderer.invoke('gdrive:logout'),
+    checkRemote: () => ipcRenderer.invoke('gdrive:check-remote'),
+    uploadSync: (masterPassword) => ipcRenderer.invoke('gdrive:upload-sync', { masterPassword }),
+    downloadSync: (masterPassword) => ipcRenderer.invoke('gdrive:download-sync', { masterPassword }),
+    saveOptions: (options) => ipcRenderer.invoke('gdrive:save-sync-options', options)
+  },
+
   // System & Application
   getHomeDir: () => ipcRenderer.invoke('system:get-home'),
   getSystemInfo: () => ipcRenderer.invoke('system:info'),

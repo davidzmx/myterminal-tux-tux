@@ -5,6 +5,10 @@ const fs = require('fs');
 const net = require('net');
 const { execFile, execSync } = require('child_process');
 
+const GDriveService = require('./services/gdrive-service');
+const { encryptSyncPayload, decryptSyncPayload } = require('./services/crypto-sync');
+let gdriveService = null;
+
 let pty;
 try {
   pty = require('node-pty');
@@ -690,6 +694,178 @@ function registerIpcHandlers() {
 
   ipcMain.handle('config:reset-button-groups', () => {
     return getDefaultConfig().buttonGroups;
+  });
+
+  // ================= GOOGLE DRIVE CLOUD SYNC =================
+  ipcMain.handle('gdrive:get-status', async () => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    const status = await gdriveService.getStatus();
+    const cfg = getUserConfig();
+    status.cloudSyncConfig = cfg.cloudSync || {
+      autoSyncOnExit: false,
+      autoSyncOnSshSave: false,
+      lastSync: null
+    };
+    return status;
+  });
+
+  ipcMain.handle('gdrive:import-client-credentials', async (event, customPath) => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    let targetPath = customPath;
+    if (!targetPath) {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Seleccionar archivo credentials.json de Google OAuth',
+        filters: [
+          { name: 'Archivos JSON (*.json)', extensions: ['json'] },
+          { name: 'Todos los archivos', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      });
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { canceled: true };
+      }
+      targetPath = result.filePaths[0];
+    }
+    try {
+      const res = await gdriveService.importClientCredentials(targetPath);
+      return { canceled: false, success: true, ...res };
+    } catch (err) {
+      return { canceled: false, success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('gdrive:login', async () => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    try {
+      const res = await gdriveService.startOAuthFlow();
+      return { success: true, ...res };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('gdrive:logout', async () => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    return await gdriveService.logout();
+  });
+
+  ipcMain.handle('gdrive:check-remote', async () => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    try {
+      const remoteFile = await gdriveService.findRemoteSyncFile();
+      return { success: true, remoteFile };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('gdrive:upload-sync', async (event, { masterPassword }) => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    if (!masterPassword) {
+      return { success: false, error: 'Debes proporcionar una contraseña maestra para cifrar los datos.' };
+    }
+    try {
+      const config = getUserConfig();
+      const profiles = loadJsonFile('ssh-profiles.json', []);
+      const sessions = loadJsonFile('sessions.json', {});
+      const tabTemplates = loadJsonFile('tab-templates.json', {});
+
+      const bundle = {
+        app: 'myterminal-tux-tux',
+        version: app.getVersion(),
+        syncTimestamp: new Date().toISOString(),
+        config,
+        profiles,
+        sessions,
+        tabTemplates
+      };
+
+      const encrypted = encryptSyncPayload(bundle, masterPassword);
+      const uploadRes = await gdriveService.uploadSyncFile(encrypted);
+
+      if (!config.cloudSync) config.cloudSync = {};
+      config.cloudSync.lastSync = uploadRes.modifiedTime || new Date().toISOString();
+      saveJsonFile('config.json', config);
+
+      return {
+        success: true,
+        modifiedTime: config.cloudSync.lastSync,
+        action: uploadRes.action,
+        stats: {
+          profilesCount: profiles.length,
+          sessionsCount: Object.keys(sessions).length,
+          templatesCount: Object.keys(tabTemplates).length
+        }
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('gdrive:download-sync', async (event, { masterPassword }) => {
+    if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
+    if (!masterPassword) {
+      return { success: false, error: 'Debes ingresar tu contraseña maestra para descifrar los datos.' };
+    }
+    try {
+      const { content, remoteFile } = await gdriveService.downloadSyncFile();
+      const data = decryptSyncPayload(content, masterPassword);
+
+      if (!data || typeof data !== 'object') {
+        return { success: false, error: 'El archivo descargado no contiene datos válidos.' };
+      }
+
+      if (data.config && typeof data.config === 'object') {
+        if (data.config.defaultShell) {
+          const available = getAvailableShells();
+          const exists = available.some((s) => s.path === data.config.defaultShell);
+          if (!exists) {
+            let defaultShellPath = available[0]?.path || '';
+            if (process.platform === 'win32') {
+              const ps = available.find(s => s.name.includes('PowerShell'));
+              defaultShellPath = ps ? ps.path : (process.env.COMSPEC || 'powershell.exe');
+            } else {
+              const bash = available.find(s => s.path === '/bin/bash' || s.path === '/usr/bin/bash' || s.name.toLowerCase() === 'bash');
+              defaultShellPath = bash ? bash.path : (available[0]?.path || '/bin/bash');
+            }
+            data.config.defaultShell = defaultShellPath;
+          }
+        }
+        if (!data.config.cloudSync) data.config.cloudSync = {};
+        data.config.cloudSync.lastSync = remoteFile.modifiedTime || new Date().toISOString();
+        saveJsonFile('config.json', data.config);
+      }
+      if (Array.isArray(data.profiles)) {
+        saveJsonFile('ssh-profiles.json', data.profiles);
+      }
+      if (data.sessions && typeof data.sessions === 'object') {
+        saveJsonFile('sessions.json', data.sessions);
+      }
+      if (data.tabTemplates && typeof data.tabTemplates === 'object') {
+        saveJsonFile('tab-templates.json', data.tabTemplates);
+      }
+
+      return {
+        success: true,
+        remoteModifiedTime: remoteFile.modifiedTime,
+        stats: {
+          profilesCount: Array.isArray(data.profiles) ? data.profiles.length : 0,
+          sessionsCount: data.sessions ? Object.keys(data.sessions).length : 0,
+          templatesCount: data.tabTemplates ? Object.keys(data.tabTemplates).length : 0
+        },
+        data
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('gdrive:save-sync-options', (event, options) => {
+    const config = getUserConfig();
+    if (!config.cloudSync) config.cloudSync = {};
+    Object.assign(config.cloudSync, options);
+    saveJsonFile('config.json', config);
+    return { success: true, cloudSync: config.cloudSync };
   });
 
   // Available Shells

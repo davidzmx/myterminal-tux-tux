@@ -66,6 +66,80 @@ Cada terminal abierta cuenta con una barra de herramientas completa:
 
 ---
 
+### 6. Sincronización en la Nube con Google Drive (Zero-Knowledge)
+- Sincroniza tus perfiles SSH, sesiones guardadas, pestañas y configuraciones entre computadoras de forma 100% privada.
+- **Cifrado Zero-Knowledge (AES-256-GCM)**: Todos los datos confidenciales (usuarios, IPs, puertos y contraseñas de auto-login) se cifran localmente con una contraseña maestra antes de salir de tu equipo.
+- Sin clientes de escritorio externos: la app se conecta directamente mediante la API oficial de Google Drive.
+
+---
+
+## ☁️ Guía de Sincronización en la Nube con Google Drive
+
+MyTerminal Tux Tux permite sincronizar en la nube todos tus **perfiles SSH**, **sesiones**, **plantillas de pestañas** y **configuraciones de botones** de forma automática y cifrada.
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   MyTerminal Tux Tux                   │
+│                                                        │
+│  1. Empaquetar: Perfiles SSH + Sesiones + Ajustes      │
+│  2. Cifrado local: AES-256-GCM con Contraseña Maestra   │
+│  3. Envío seguro: Google Drive API (OAuth 2.0)         │
+└──────────────────────────┬─────────────────────────────┘
+                           │ HTTPS Directo
+                           ▼
+          ☁️ GOOGLE DRIVE [ tux-tux-sync.enc ]
+               (Cifrado Zero-Knowledge)
+```
+
+### 🔐 Seguridad Zero-Knowledge
+Los perfiles SSH suelen incluir usuarios, direcciones IP y contraseñas de auto-login. Por ello, la aplicación los cifra localmente en tu propia máquina mediante **AES-256-GCM** y derivación de claves **PBKDF2** (con 100,000 iteraciones y salt aleatorio) antes de subirlos a Google Drive. Ni Google ni intermediarios pueden leer tus credenciales.
+
+---
+
+### 📋 Pasos para Configurar la Sincronización
+
+#### Paso 1: Obtener o reutilizar el archivo `credentials.json`
+Si ya dispones de un archivo de credenciales de cliente OAuth (por ejemplo, el de proyectos como *MyGDriveSync*), puedes reutilizarlo directamente. 
+
+Si deseas generar uno nuevo desde cero:
+1. Accede a [Google Cloud Console](https://console.cloud.google.com/).
+2. Crea un proyecto (ejemplo: *MyTerminal Tux Tux*) y activa la **Google Drive API** en la sección *APIs y servicios > Habilitar APIs*.
+3. En **Pantalla de consentimiento de OAuth**:
+   - Selecciona tipo de usuario *Externo* y completa el nombre y tu correo de soporte.
+   - En *Permisos (Scopes)*, añade el permiso de Google Drive: `https://www.googleapis.com/auth/drive.file` o `drive.appdata`.
+   - En *Usuarios de prueba*, añade tu propia dirección de Gmail.
+4. En **Credenciales**:
+   - Haz clic en *+ Crear credenciales > ID de cliente de OAuth*.
+   - Tipo de aplicación: selecciona **App de escritorio (Desktop App)**.
+   - Descarga el archivo JSON resultante (tendrá un nombre como `client_secret_xxx.json` o `credentials.json`).
+
+#### Paso 2: Cargar las credenciales en la terminal
+1. Abre MyTerminal Tux Tux y dirígete a **⚙️ Ajustes > ☁️ Google Drive**.
+2. Haz clic en el botón **`📂 Cargar credentials.json...`**.
+3. Selecciona tu archivo JSON. La aplicación registrará el cliente OAuth localmente.
+
+#### Paso 3: Iniciar sesión con Google
+1. En la misma pestaña, haz clic en **`🌐 Iniciar sesión con Google Drive`**.
+2. Se abrirá automáticamente tu navegador web predeterminado pidiéndote autorizar la conexión con tu cuenta de Google.
+3. Haz clic en **Permitir**.
+4. Verás la pantalla de confirmación: *"¡Autenticación Exitosa!"*. Puedes cerrar el navegador y regresar a la terminal; verás tu correo conectado con un indicador verde (`usuario@gmail.com ● Conectado`).
+
+#### Paso 4: Establecer la Contraseña Maestra de Cifrado
+1. En la tarjeta **2. Contraseña Maestra de Cifrado**, introduce una contraseña segura.
+2. ⚠️ **Importante:** Utiliza la misma contraseña maestra en todas tus computadoras para poder descifrar los datos que descargues de la nube.
+
+#### Paso 5: Subir o Descargar tus Datos
+- **Subir a la nube (`⬆️ Subir y Guardar en Drive`)**: Cifra todos tus perfiles SSH, sesiones y configuraciones, y crea/actualiza el archivo `tux-tux-sync.enc` en tu Google Drive.
+- **Descargar de la nube (`⬇️ Descargar y Restaurar de Drive`)**: Descarga la última copia de tu Drive, la descifra con tu contraseña maestra y restaura de inmediato todos tus perfiles SSH y sesiones.
+- **Comprobar Nube (`🔄 Comprobar Nube`)**: Muestra la fecha exacta y el tamaño de la copia almacenada en tu Google Drive.
+
+#### ⚙️ Opciones de Sincronización Automática
+Puedes marcar las siguientes casillas para que la app trabaje en segundo plano:
+- `☑ Sincronizar automáticamente en la nube al salir de la aplicación`: Sube una copia actualizada al cerrar la terminal.
+- `☑ Sincronizar automáticamente al guardar o editar perfiles SSH`: Realiza un respaldo inmediato cada vez que crees, modifiques o elimines un servidor SSH.
+
+---
+
 ## ⌨️ Atajos de Teclado
 
 | Atajo | Acción |

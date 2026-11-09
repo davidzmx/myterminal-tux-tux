@@ -48,6 +48,13 @@
           <span class="btn-icon">📐</span> Layout
         </button>
 
+        <!-- Google Drive Cloud Indicator (a la izquierda de Perfiles SSH) -->
+        <button id="btn-cloud-status" class="top-btn cloud-status-btn hidden" title="Google Drive: Conectado. Clic para sincronizar.">
+          <span class="cloud-status-led"></span>
+          <span class="btn-icon">☁️</span>
+          <span id="cloud-status-text">Drive</span>
+        </button>
+
         <button id="btn-ssh-manager" class="top-btn highlight" title="Administrar Perfiles SSH">
           <span class="btn-icon">🔑</span> Perfiles SSH
         </button>
@@ -62,6 +69,10 @@
       <div id="status-info">
         <span id="active-tab-info">Pestaña 1</span> •
         <span id="active-term-info">Terminal activa: Ninguna</span>
+      </div>
+      <div id="status-cloud-indicator" class="status-cloud-pill hidden" title="Google Drive: Conectado. Clic para sincronizar.">
+        <span class="cloud-status-led small"></span>
+        <span id="status-cloud-text">☁️ Conectado</span>
       </div>
       <div class="shortcuts-hint">
         <span>Click derecho en terminal: <b>Dividir / SSH</b> • Click derecho en botón Git: <b>Editar comando</b></span>
@@ -256,6 +267,7 @@
           <button class="settings-nav-btn" data-settings-tab="tab-git-opts">Grupos y Botones de Comandos</button>
           <button class="settings-nav-btn" data-settings-tab="tab-fav-opts">Carpetas Favoritas</button>
           <button class="settings-nav-btn" data-settings-tab="tab-backup-opts">Copia de Seguridad & Migración</button>
+          <button class="settings-nav-btn" data-settings-tab="tab-gdrive-opts">☁️ Google Drive</button>
           <button class="settings-nav-btn" data-settings-tab="tab-about-opts">Acerca de</button>
         </div>
 
@@ -502,6 +514,156 @@
                 Solo copia los archivos <code>config.json</code>, <code>ssh-profiles.json</code>,
                 <code>sessions.json</code> y <code>tab-templates.json</code> a la misma ruta en la otra computadora.
               </small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Google Drive Cloud Sync -->
+        <div id="tab-gdrive-opts" class="settings-tab-pane">
+          <div class="git-actions-header">
+            <div>
+              <p class="modal-subtitle" style="margin-bottom: 4px;">Sincronización en la nube con Google Drive y cifrado Zero-Knowledge.</p>
+              <small class="form-hint" style="margin-top:0;">Sincroniza perfiles SSH, sesiones, plantillas y ajustes entre computadoras de forma 100% privada.</small>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+            <!-- Card 1: Cuenta y Credenciales de Google OAuth -->
+            <div class="gdrive-card">
+              <div class="gdrive-card-header">
+                <span class="gdrive-card-icon">🔑</span>
+                <div>
+                  <h4 class="gdrive-card-title">1. Conexión con Google Drive</h4>
+                  <p class="gdrive-card-desc">Conecta tu cuenta de Google mediante tu archivo de credenciales de cliente OAuth (credentials.json).</p>
+                </div>
+              </div>
+
+              <!-- State A: No credentials loaded -->
+              <div id="gdrive-no-client-box" class="gdrive-box">
+                <p style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+                  Aún no has configurado tus credenciales. Puedes seleccionar el archivo <code>credentials.json</code> o <code>client_secret.json</code> de tu proyecto (como el de MyGDriveSync):
+                </p>
+                <button type="button" id="btn-gdrive-import-creds" class="btn btn-primary">
+                  📂 Cargar credentials.json...
+                </button>
+              </div>
+
+              <!-- State B: Credentials loaded -->
+              <div id="gdrive-has-client-box" class="gdrive-box hidden">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">📄</span>
+                    <div>
+                      <div style="font-size: 12px; font-weight: 600; color: var(--text-main);" id="gdrive-client-summary">Credenciales OAuth configuradas</div>
+                      <div style="font-size: 11px; color: var(--text-dim);" id="gdrive-project-summary">Proyecto Google Cloud</div>
+                    </div>
+                  </div>
+                  <button type="button" id="btn-gdrive-reimport-creds" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">
+                    🔄 Cambiar credentials.json
+                  </button>
+                </div>
+
+                <!-- Auth buttons -->
+                <div id="gdrive-not-logged-box" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                  <button type="button" id="btn-gdrive-login" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
+                    <span>🌐</span> Iniciar sesión con Google Drive
+                  </button>
+                  <span style="font-size: 11px; color: var(--text-dim);">Se abrirá tu navegador para autorizar la conexión.</span>
+                </div>
+
+                <div id="gdrive-logged-box" class="hidden" style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 10px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 20px;">👤</span>
+                    <div>
+                      <div style="font-size: 13px; font-weight: 600; color: var(--text-main);" id="gdrive-user-email">usuario@gmail.com</div>
+                      <div style="font-size: 11px; color: #4ade80; display: flex; align-items: center; gap: 4px;">
+                        <span>●</span> Conectado a Google Drive
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" id="btn-gdrive-logout" class="btn btn-secondary" style="color: #f87171; border-color: rgba(248,113,113,0.3); font-size: 11px; padding: 4px 10px;">
+                    ✕ Desconectar cuenta
+                  </button>
+                </div>
+
+                <div id="gdrive-auth-feedback-msg" class="hidden" style="margin-top: 10px; padding: 10px 14px; border-radius: 6px; font-size: 12px;"></div>
+              </div>
+            </div>
+
+            <!-- Card 2: Seguridad y Contraseña Maestra (Zero-Knowledge) -->
+            <div class="gdrive-card">
+              <div class="gdrive-card-header">
+                <span class="gdrive-card-icon">🔐</span>
+                <div>
+                  <h4 class="gdrive-card-title">2. Contraseña Maestra de Cifrado (Zero-Knowledge)</h4>
+                  <p class="gdrive-card-desc">Cifrado local AES-256-GCM. Nadie, ni siquiera Google, puede leer tus servidores o contraseñas SSH.</p>
+                </div>
+              </div>
+
+              <div style="margin-top: 10px;">
+                <label for="gdrive-master-password" style="display: block; font-size: 12px; font-weight: 500; margin-bottom: 6px; color: var(--text-main);">
+                  Contraseña Maestra:
+                </label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="password" id="gdrive-master-password" class="form-input" placeholder="Ingresa tu contraseña de cifrado..." style="flex: 1;" />
+                  <button type="button" id="btn-gdrive-toggle-pass" class="btn btn-secondary" title="Mostrar/Ocultar contraseña" style="padding: 6px 12px;">
+                    👁️
+                  </button>
+                </div>
+                <small class="form-hint" style="margin-top: 6px; display: block;">
+                  ⚠️ <b>Importante:</b> Debes usar exactamente la misma contraseña en todos tus dispositivos para poder descifrar los datos.
+                </small>
+              </div>
+            </div>
+
+            <!-- Card 3: Operaciones de Sincronización -->
+            <div class="gdrive-card">
+              <div class="gdrive-card-header">
+                <span class="gdrive-card-icon">☁️</span>
+                <div>
+                  <h4 class="gdrive-card-title">3. Acciones de Sincronización</h4>
+                  <p class="gdrive-card-desc">Sube tus datos locales o descarga la última versión almacenada en Google Drive.</p>
+                </div>
+              </div>
+
+              <!-- Timestamps & Status -->
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 12px 0;">
+                <div style="background: var(--bg-dark); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                  <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">Última Sincronización Local</div>
+                  <div style="font-size: 12px; color: var(--text-main); font-weight: 600; margin-top: 2px;" id="gdrive-last-sync-local">Nunca</div>
+                </div>
+                <div style="background: var(--bg-dark); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                  <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">Archivo en Google Drive</div>
+                  <div style="font-size: 12px; color: var(--accent-cyan); font-weight: 600; margin-top: 2px;" id="gdrive-remote-sync-info">Pendiente de verificar</div>
+                </div>
+              </div>
+
+              <!-- Action buttons -->
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+                <button type="button" id="btn-gdrive-upload" class="btn btn-primary" style="padding: 8px 16px;">
+                  ⬆️ Subir y Guardar en Drive
+                </button>
+                <button type="button" id="btn-gdrive-download" class="btn btn-secondary" style="padding: 8px 16px;">
+                  ⬇️ Descargar y Restaurar de Drive
+                </button>
+                <button type="button" id="btn-gdrive-check-remote" class="btn btn-secondary" title="Comprobar si hay una copia más reciente en la nube" style="padding: 8px 12px;">
+                  🔄 Comprobar Nube
+                </button>
+              </div>
+
+              <!-- Automation options -->
+              <div style="border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main); cursor: pointer;">
+                  <input type="checkbox" id="chk-gdrive-auto-sync-exit" />
+                  <span>Sincronizar automáticamente en la nube al salir de la aplicación</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main); cursor: pointer;">
+                  <input type="checkbox" id="chk-gdrive-auto-sync-ssh" />
+                  <span>Sincronizar automáticamente al guardar o editar perfiles SSH</span>
+                </label>
+              </div>
+
+              <div id="gdrive-feedback-msg" class="hidden" style="margin-top: 12px; padding: 10px 14px; border-radius: 6px; font-size: 12px;"></div>
             </div>
           </div>
         </div>

@@ -175,6 +175,9 @@ class TuxTerminalApp {
     // Create first default tab
     this.createTab('Principal');
 
+    // Initialize cloud sync status in top bar & status bar
+    this.refreshGDriveUI();
+
     // Polling git info every 2.5s for terminals
     setInterval(() => {
       this.updateAllGitInfo();
@@ -353,6 +356,22 @@ class TuxTerminalApp {
         } catch (err) {
           console.error('Error al copiar repositorio:', err);
         }
+      });
+    }
+
+    this.initGDriveEvents();
+
+    const btnCloud = document.getElementById('btn-cloud-status');
+    if (btnCloud) {
+      btnCloud.addEventListener('click', () => {
+        this.openSettingsModal('tab-gdrive-opts');
+      });
+    }
+
+    const statusCloud = document.getElementById('status-cloud-indicator');
+    if (statusCloud) {
+      statusCloud.addEventListener('click', () => {
+        this.openSettingsModal('tab-gdrive-opts');
       });
     }
 
@@ -1108,6 +1127,9 @@ class TuxTerminalApp {
 
     // Allow a brief moment for SSH process teardown and socket closure
     await new Promise((r) => setTimeout(r, 160));
+    try {
+      await this.triggerAutoCloudSync('exit');
+    } catch (e) {}
     await window.api.exitApp();
   }
 
@@ -1266,6 +1288,7 @@ class TuxTerminalApp {
     this.renderGitActionsConfig();
     this.renderFavoritesConfig();
     this.renderAboutInfo();
+    this.refreshGDriveUI();
 
     if (tabName) {
       document.querySelectorAll('.settings-nav-btn').forEach((b) => {
@@ -1314,6 +1337,313 @@ class TuxTerminalApp {
       }
     } catch (err) {
       console.warn('No se pudo cargar información del sistema para Acerca de:', err);
+    }
+  }
+
+  // ================= GOOGLE DRIVE CLOUD SYNC =================
+  initGDriveEvents() {
+    const importCreds = async () => {
+      try {
+        const res = await window.api.gdrive.importCredentials();
+        if (res.canceled) return;
+        if (res.success) {
+          this.showGDriveFeedback(`✓ Credenciales importadas exitosamente (Proyecto: ${res.projectId})`, 'success', 'auth');
+          await this.refreshGDriveUI();
+        } else {
+          this.showGDriveFeedback(`❌ Error al importar: ${res.error}`, 'error', 'auth');
+        }
+      } catch (err) {
+        this.showGDriveFeedback(`❌ Error: ${err.message}`, 'error', 'auth');
+      }
+    };
+
+    document.getElementById('btn-gdrive-import-creds')?.addEventListener('click', importCreds);
+    document.getElementById('btn-gdrive-reimport-creds')?.addEventListener('click', importCreds);
+
+    document.getElementById('btn-gdrive-login')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-gdrive-login');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Esperando autorización en el navegador...';
+      this.showGDriveFeedback('Se abrió tu navegador para autorizar la conexión con Google...', 'info', 'auth');
+
+      try {
+        const res = await window.api.gdrive.login();
+        if (res.success) {
+          this.showGDriveFeedback(`✓ ¡Conectado exitosamente como ${res.userEmail}!`, 'success', 'auth');
+          await this.refreshGDriveUI();
+        } else {
+          this.showGDriveFeedback(`❌ ${res.error}`, 'error', 'auth');
+        }
+      } catch (err) {
+        this.showGDriveFeedback(`❌ Error en inicio de sesión: ${err.message}`, 'error', 'auth');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+
+    document.getElementById('btn-gdrive-logout')?.addEventListener('click', async () => {
+      try {
+        await window.api.gdrive.logout();
+        this.showGDriveFeedback('Sesión de Google Drive desconectada.', 'info', 'auth');
+        await this.refreshGDriveUI();
+      } catch (err) {
+        this.showGDriveFeedback(`❌ Error: ${err.message}`, 'error', 'auth');
+      }
+    });
+
+    document.getElementById('btn-gdrive-toggle-pass')?.addEventListener('click', () => {
+      const input = document.getElementById('gdrive-master-password');
+      if (input) {
+        input.type = input.type === 'password' ? 'text' : 'password';
+      }
+    });
+
+    document.getElementById('btn-gdrive-upload')?.addEventListener('click', async () => {
+      const pass = document.getElementById('gdrive-master-password')?.value;
+      if (!pass || pass.trim().length === 0) {
+        this.showGDriveFeedback('⚠️ Debes ingresar una Contraseña Maestra para cifrar los datos antes de subir.', 'error', 'sync');
+        document.getElementById('gdrive-master-password')?.focus();
+        return;
+      }
+
+      const btn = document.getElementById('btn-gdrive-upload');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Cifrando y subiendo a Drive...';
+
+      try {
+        const res = await window.api.gdrive.uploadSync(pass.trim());
+        if (res.success) {
+          this.showGDriveFeedback(
+            `✓ ¡Sincronizado con éxito en Google Drive! (${res.stats.profilesCount} perfiles SSH, ${res.stats.sessionsCount} sesiones empaquetadas y cifradas con AES-256).`,
+            'success',
+            'sync'
+          );
+          await this.refreshGDriveUI();
+        } else {
+          this.showGDriveFeedback(`❌ Error al subir: ${res.error}`, 'error', 'sync');
+        }
+      } catch (err) {
+        this.showGDriveFeedback(`❌ Error al subir: ${err.message}`, 'error', 'sync');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+
+    document.getElementById('btn-gdrive-download')?.addEventListener('click', async () => {
+      const pass = document.getElementById('gdrive-master-password')?.value;
+      if (!pass || pass.trim().length === 0) {
+        this.showGDriveFeedback('⚠️ Debes ingresar la Contraseña Maestra para descifrar los datos descargados.', 'error', 'sync');
+        document.getElementById('gdrive-master-password')?.focus();
+        return;
+      }
+
+      const btn = document.getElementById('btn-gdrive-download');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Descargando y descifrando...';
+
+      try {
+        const res = await window.api.gdrive.downloadSync(pass.trim());
+        if (res.success) {
+          this.showGDriveFeedback(
+            `✓ ¡Descarga completada y aplicada! Restaurados ${res.stats.profilesCount} perfiles SSH, ${res.stats.sessionsCount} sesiones y ajustes.`,
+            'success',
+            'sync'
+          );
+          await this.loadProfiles();
+          this.renderGitActionsConfig();
+          this.renderFavoritesConfig();
+          this.refreshAllGitToolbars();
+          this.updateAllGitInfo();
+          await this.refreshGDriveUI();
+        } else {
+          this.showGDriveFeedback(`❌ Error: ${res.error}`, 'error', 'sync');
+        }
+      } catch (err) {
+        this.showGDriveFeedback(`❌ Error al descargar: ${err.message}`, 'error', 'sync');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+
+    document.getElementById('btn-gdrive-check-remote')?.addEventListener('click', async () => {
+      const remoteInfoEl = document.getElementById('gdrive-remote-sync-info');
+      if (remoteInfoEl) remoteInfoEl.textContent = 'Verificando en Drive...';
+      try {
+        const res = await window.api.gdrive.checkRemote();
+        if (res.success && res.remoteFile) {
+          const mod = new Date(res.remoteFile.modifiedTime).toLocaleString();
+          const sizeKb = (res.remoteFile.size / 1024).toFixed(1);
+          if (remoteInfoEl) remoteInfoEl.textContent = `${mod} (${sizeKb} KB)`;
+          this.showGDriveFeedback(`Copia encontrada en Google Drive: modificada el ${mod} (${sizeKb} KB).`, 'info', 'sync');
+        } else if (res.success && !res.remoteFile) {
+          if (remoteInfoEl) remoteInfoEl.textContent = 'No hay archivo en Drive';
+          this.showGDriveFeedback('No se encontró ninguna copia en la nube todavía. Haz clic en "Subir y Guardar en Drive".', 'info', 'sync');
+        } else {
+          if (remoteInfoEl) remoteInfoEl.textContent = 'Error al comprobar';
+          this.showGDriveFeedback(`❌ ${res.error}`, 'error', 'sync');
+        }
+      } catch (err) {
+        if (remoteInfoEl) remoteInfoEl.textContent = 'Error';
+        this.showGDriveFeedback(`❌ Error: ${err.message}`, 'error', 'sync');
+      }
+    });
+
+    const chkExit = document.getElementById('chk-gdrive-auto-sync-exit');
+    const chkSsh = document.getElementById('chk-gdrive-auto-sync-ssh');
+
+    chkExit?.addEventListener('change', async () => {
+      await window.api.gdrive.saveOptions({ autoSyncOnExit: chkExit.checked });
+    });
+
+    chkSsh?.addEventListener('change', async () => {
+      await window.api.gdrive.saveOptions({ autoSyncOnSshSave: chkSsh.checked });
+    });
+  }
+
+  showGDriveFeedback(message, type = 'info', section = 'sync') {
+    const elId = section === 'auth' ? 'gdrive-auth-feedback-msg' : 'gdrive-feedback-msg';
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.className = '';
+    el.classList.remove('hidden');
+
+    if (type === 'success') {
+      el.style.background = 'rgba(34, 197, 94, 0.15)';
+      el.style.border = '1px solid rgba(34, 197, 94, 0.4)';
+      el.style.color = '#4ade80';
+    } else if (type === 'error') {
+      el.style.background = 'rgba(239, 68, 68, 0.15)';
+      el.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      el.style.color = '#f87171';
+    } else {
+      el.style.background = 'rgba(6, 182, 212, 0.12)';
+      el.style.border = '1px solid rgba(6, 182, 212, 0.3)';
+      el.style.color = '#38bdf8';
+    }
+
+    el.textContent = message;
+  }
+
+  async refreshGDriveUI() {
+    try {
+      if (!window.api || !window.api.gdrive) return;
+      const status = await window.api.gdrive.getStatus();
+      if (!status) return;
+
+      const noClientBox = document.getElementById('gdrive-no-client-box');
+      const hasClientBox = document.getElementById('gdrive-has-client-box');
+      const notLoggedBox = document.getElementById('gdrive-not-logged-box');
+      const loggedBox = document.getElementById('gdrive-logged-box');
+      const clientSummary = document.getElementById('gdrive-client-summary');
+      const projectSummary = document.getElementById('gdrive-project-summary');
+      const userEmailEl = document.getElementById('gdrive-user-email');
+      const lastSyncLocalEl = document.getElementById('gdrive-last-sync-local');
+
+      if (status.hasClientConfig) {
+        noClientBox?.classList.add('hidden');
+        hasClientBox?.classList.remove('hidden');
+        if (clientSummary && status.clientInfo) {
+          clientSummary.textContent = `Credenciales cargadas (${status.clientInfo.clientId})`;
+          projectSummary.textContent = `Proyecto: ${status.clientInfo.projectId}`;
+        }
+      } else {
+        noClientBox?.classList.remove('hidden');
+        hasClientBox?.classList.add('hidden');
+      }
+
+      const btnCloudStatus = document.getElementById('btn-cloud-status');
+      const cloudStatusText = document.getElementById('cloud-status-text');
+      const statusCloudIndicator = document.getElementById('status-cloud-indicator');
+      const statusCloudText = document.getElementById('status-cloud-text');
+
+      if (status.isAuthenticated) {
+        notLoggedBox?.classList.add('hidden');
+        loggedBox?.classList.remove('hidden');
+        if (userEmailEl) userEmailEl.textContent = status.userEmail || 'Usuario conectado';
+
+        // Update Top Bar Cloud Status Button
+        if (btnCloudStatus) {
+          btnCloudStatus.classList.remove('hidden');
+          const shortUser = status.userEmail ? status.userEmail.split('@')[0] : 'Drive';
+          if (cloudStatusText) cloudStatusText.textContent = `Drive: ${shortUser}`;
+          btnCloudStatus.title = `Google Drive: Conectado como ${status.userEmail || 'Usuario'}. Clic para gestionar sincronización.`;
+        }
+
+        // Update Footer Status Bar
+        if (statusCloudIndicator) {
+          statusCloudIndicator.classList.remove('hidden');
+          if (statusCloudText) {
+            statusCloudText.textContent = `☁️ Drive: ${status.userEmail || 'Conectado'}`;
+          }
+          statusCloudIndicator.title = `Google Drive: Conectado (${status.userEmail}). Clic para ver sincronización.`;
+        }
+      } else {
+        notLoggedBox?.classList.remove('hidden');
+        loggedBox?.classList.add('hidden');
+
+        if (btnCloudStatus) btnCloudStatus.classList.add('hidden');
+        if (statusCloudIndicator) statusCloudIndicator.classList.add('hidden');
+      }
+
+      if (lastSyncLocalEl) {
+        if (status.cloudSyncConfig && status.cloudSyncConfig.lastSync) {
+          lastSyncLocalEl.textContent = new Date(status.cloudSyncConfig.lastSync).toLocaleString();
+        } else {
+          lastSyncLocalEl.textContent = 'Nunca';
+        }
+      }
+
+      const chkExit = document.getElementById('chk-gdrive-auto-sync-exit');
+      const chkSsh = document.getElementById('chk-gdrive-auto-sync-ssh');
+      if (chkExit && status.cloudSyncConfig) {
+        chkExit.checked = !!status.cloudSyncConfig.autoSyncOnExit;
+      }
+      if (chkSsh && status.cloudSyncConfig) {
+        chkSsh.checked = !!status.cloudSyncConfig.autoSyncOnSshSave;
+      }
+
+      if (status.isAuthenticated) {
+        window.api.gdrive.checkRemote().then((res) => {
+          const remoteInfoEl = document.getElementById('gdrive-remote-sync-info');
+          if (remoteInfoEl) {
+            if (res && res.success && res.remoteFile) {
+              const mod = new Date(res.remoteFile.modifiedTime).toLocaleString();
+              const sizeKb = (res.remoteFile.size / 1024).toFixed(1);
+              remoteInfoEl.textContent = `${mod} (${sizeKb} KB)`;
+            } else if (res && res.success) {
+              remoteInfoEl.textContent = 'Sin archivo en Drive';
+            }
+          }
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Error al actualizar interfaz de Google Drive:', err);
+    }
+  }
+
+  async triggerAutoCloudSync(reason) {
+    try {
+      if (!window.api || !window.api.gdrive) return;
+      const status = await window.api.gdrive.getStatus();
+      if (!status || !status.isAuthenticated) return;
+      if (!status.cloudSyncConfig) return;
+
+      if (reason === 'ssh' && !status.cloudSyncConfig.autoSyncOnSshSave) return;
+      if (reason === 'exit' && !status.cloudSyncConfig.autoSyncOnExit) return;
+
+      const masterPass = document.getElementById('gdrive-master-password')?.value;
+      if (!masterPass || masterPass.trim().length === 0) return;
+
+      await window.api.gdrive.uploadSync(masterPass.trim());
+      console.log('Sincronización automática con Google Drive completada.');
+    } catch (e) {
+      console.warn('Auto-sync a Google Drive omitido:', e.message);
     }
   }
 
@@ -4527,6 +4857,7 @@ class TuxTerminalApp {
     await window.api.saveProfiles(this.profiles);
     this.renderSshProfilesList();
     this.fillSshForm(profile);
+    this.triggerAutoCloudSync('ssh');
   }
 
   async handleDeleteSshProfile() {
@@ -4538,6 +4869,7 @@ class TuxTerminalApp {
     await window.api.saveProfiles(this.profiles);
     this.renderSshProfilesList();
     this.clearSshForm();
+    this.triggerAutoCloudSync('ssh');
   }
 
   // ================= GENERAL SESSIONS =================
