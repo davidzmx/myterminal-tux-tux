@@ -236,7 +236,12 @@ function getDefaultConfig() {
     ],
     favorites: [
       { id: 'fav-home', name: 'Inicio (~)', path: os.homedir() }
-    ]
+    ],
+    cloudSync: {
+      autoSyncOnExit: true,
+      autoSyncOnSshSave: true,
+      lastSync: null
+    }
   };
 }
 
@@ -701,10 +706,10 @@ function registerIpcHandlers() {
     if (!gdriveService) gdriveService = new GDriveService(app.getPath('userData'));
     const status = await gdriveService.getStatus();
     const cfg = getUserConfig();
-    status.cloudSyncConfig = cfg.cloudSync || {
-      autoSyncOnExit: false,
-      autoSyncOnSshSave: false,
-      lastSync: null
+    status.cloudSyncConfig = {
+      autoSyncOnExit: cfg.cloudSync?.autoSyncOnExit !== false,
+      autoSyncOnSshSave: cfg.cloudSync?.autoSyncOnSshSave !== false,
+      lastSync: cfg.cloudSync?.lastSync || null
     };
     return status;
   });

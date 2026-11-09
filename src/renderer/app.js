@@ -1449,17 +1449,36 @@ class TuxTerminalApp {
       try {
         const res = await window.api.gdrive.downloadSync(pass.trim());
         if (res.success) {
-          this.showGDriveFeedback(
-            `✓ ¡Descarga completada y aplicada! Restaurados ${res.stats.profilesCount} perfiles SSH, ${res.stats.sessionsCount} sesiones y ajustes.`,
-            'success',
-            'sync'
-          );
-          await this.loadProfiles();
+          if (res.data) {
+            if (res.data.config) {
+              this.config = res.data.config;
+              this.applyTheme(this.config.theme || 'dark');
+              this.applySshHeaderColor();
+            }
+            if (Array.isArray(res.data.profiles)) {
+              this.profiles = res.data.profiles;
+              this.renderSshProfilesList();
+            }
+          } else {
+            this.config = await window.api.getConfig();
+            this.profiles = await window.api.getProfiles();
+            this.renderSshProfilesList();
+            this.applyTheme(this.config?.theme || 'dark');
+            this.applySshHeaderColor();
+          }
+
+          this.populateConfigGroupSelect();
           this.renderGitActionsConfig();
           this.renderFavoritesConfig();
           this.refreshAllGitToolbars();
           this.updateAllGitInfo();
           await this.refreshGDriveUI();
+
+          this.showGDriveFeedback(
+            `✓ ¡Descarga completada y aplicada! Restaurados ${res.stats.profilesCount} perfiles SSH, ${res.stats.sessionsCount} sesiones y ajustes.`,
+            'success',
+            'sync'
+          );
         } else {
           this.showGDriveFeedback(`❌ Error: ${res.error}`, 'error', 'sync');
         }
@@ -1601,11 +1620,11 @@ class TuxTerminalApp {
 
       const chkExit = document.getElementById('chk-gdrive-auto-sync-exit');
       const chkSsh = document.getElementById('chk-gdrive-auto-sync-ssh');
-      if (chkExit && status.cloudSyncConfig) {
-        chkExit.checked = !!status.cloudSyncConfig.autoSyncOnExit;
+      if (chkExit) {
+        chkExit.checked = status.cloudSyncConfig?.autoSyncOnExit !== false;
       }
-      if (chkSsh && status.cloudSyncConfig) {
-        chkSsh.checked = !!status.cloudSyncConfig.autoSyncOnSshSave;
+      if (chkSsh) {
+        chkSsh.checked = status.cloudSyncConfig?.autoSyncOnSshSave !== false;
       }
 
       if (status.isAuthenticated) {
