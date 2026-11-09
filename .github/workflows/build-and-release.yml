@@ -62,16 +62,15 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Configure Visual Studio version for node-gyp (Windows)
-        if: runner.os == 'Windows'
-        run: npm config set msvs_version 2022
-
       - name: Install dependencies
         run: npm install
+        env:
+          GYP_MSVS_VERSION: '2022'
 
       - name: Build and package application
         run: ${{ matrix.command }}
         env:
+          GYP_MSVS_VERSION: '2022'
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifacts (${{ matrix.platform }})
