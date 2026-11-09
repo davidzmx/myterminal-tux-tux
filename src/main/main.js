@@ -610,7 +610,7 @@ function registerIpcHandlers() {
 
       const bundle = {
         app: 'myterminal-tux-tux',
-        version: '1.0.0',
+        version: app.getVersion() || '1.1.0',
         exportedAt: new Date().toISOString(),
         config: getUserConfig(),
         profiles: loadJsonFile('ssh-profiles.json', []),
