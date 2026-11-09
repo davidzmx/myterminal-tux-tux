@@ -37,7 +37,8 @@
     "appId": "com.tuxtux.myterminal",
     "productName": "MyTerminal Tux Tux",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "src/**/*",
@@ -48,20 +49,35 @@
         "AppImage",
         "deb"
       ],
-      "category": "TerminalEmulator"
+      "icon": "build/icons",
+      "category": "TerminalEmulator",
+      "synopsis": "Modern terminal emulator with splits, tabs, SSH and Git integration",
+      "description": "Terminal emulator with Terminator-style splits, tabs, SSH profile manager, interactive Git buttons, and cross-platform session persistence."
     },
     "win": {
       "target": [
         "portable",
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MyTerminal Tux Tux"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     },
     "mac": {
       "target": [
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png"
     }
   }
 }

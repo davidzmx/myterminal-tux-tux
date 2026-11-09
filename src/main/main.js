@@ -445,12 +445,17 @@ function getGitStatusFiles(dir) {
 }
 
 function createWindow() {
+  const appIconPath = fs.existsSync(path.join(__dirname, '../../build/icon.png'))
+    ? path.join(__dirname, '../../build/icon.png')
+    : path.join(__dirname, '../renderer/icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 840,
     minWidth: 700,
     minHeight: 500,
     title: 'MyTerminal Tux Tux',
+    icon: appIconPath,
     backgroundColor: '#121317',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
