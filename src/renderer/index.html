@@ -48,12 +48,17 @@
           <span class="btn-icon">📐</span> Layout
         </button>
 
-        <!-- Google Drive Cloud Indicator (a la izquierda de Perfiles SSH) -->
-        <button id="btn-cloud-status" class="top-btn cloud-status-btn hidden" title="Google Drive: Conectado. Clic para sincronizar.">
-          <span class="cloud-status-led"></span>
-          <span class="btn-icon">☁️</span>
-          <span id="cloud-status-text">Drive</span>
-        </button>
+        <!-- Google Drive Cloud Indicator & Sincronizar Ahora (a la izquierda de Perfiles SSH) -->
+        <div id="cloud-status-group" class="cloud-status-group hidden">
+          <button id="btn-cloud-status" class="top-btn cloud-status-btn" title="Google Drive: Clic para abrir opciones de sincronización">
+            <span class="cloud-status-led" id="cloud-status-led"></span>
+            <span class="btn-icon">☁️</span>
+            <span id="cloud-status-text">Drive</span>
+          </button>
+          <button id="btn-cloud-sync-now" class="top-btn btn-top-sync" title="Sincronizar ahora con Google Drive">
+            <span class="btn-icon" id="top-sync-icon">🔄</span>
+          </button>
+        </div>
 
         <button id="btn-ssh-manager" class="top-btn highlight" title="Administrar Perfiles SSH">
           <span class="btn-icon">🔑</span> Perfiles SSH
@@ -610,9 +615,14 @@
                     👁️
                   </button>
                 </div>
-                <small class="form-hint" style="margin-top: 6px; display: block;">
-                  ⚠️ <b>Importante:</b> Debes usar exactamente la misma contraseña en todos tus dispositivos para poder descifrar los datos.
-                </small>
+                <div id="gdrive-master-saved-pill" class="hidden" style="margin-top: 8px; padding: 6px 10px; background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; font-size: 11px; color: #4ade80; display: flex; align-items: center; justify-content: space-between;">
+                  <span>🔒 Contraseña recordada en este equipo (auto-sincronización activa)</span>
+                  <button type="button" id="btn-gdrive-clear-pass" class="btn btn-sm btn-secondary" style="padding: 2px 8px; font-size: 10px; height: auto;">Olvidar</button>
+                </div>
+                <div style="margin-top: 8px; font-size: 11px; line-height: 1.5; color: var(--text-dim); background: var(--bg-dark); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                  <div>💡 <b>¿Cómo cambiarla?</b> Escribe una nueva contraseña arriba y pulsa <i>Subir a Drive</i> o <i>Sincronizar Ahora</i>. Se actualizará en este equipo y en la nube.</div>
+                  <div style="margin-top: 4px;">❓ <b>¿La olvidaste?</b> Tus datos locales nunca se borran. Introduce una nueva contraseña y dale a <i>Subir a Drive</i> para cifrar tu configuración actual con la nueva clave.</div>
+                </div>
               </div>
             </div>
 
@@ -640,14 +650,17 @@
 
               <!-- Action buttons -->
               <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
-                <button type="button" id="btn-gdrive-upload" class="btn btn-primary" style="padding: 8px 16px;">
-                  ⬆️ Subir y Guardar en Drive
+                <button type="button" id="btn-gdrive-sync-now" class="btn btn-primary" style="padding: 8px 18px; background: linear-gradient(135deg, #0284c7, #0ea5e9); font-weight: 600;">
+                  🔄 Sincronizar Ahora
                 </button>
-                <button type="button" id="btn-gdrive-download" class="btn btn-secondary" style="padding: 8px 16px;">
-                  ⬇️ Descargar y Restaurar de Drive
+                <button type="button" id="btn-gdrive-upload" class="btn btn-secondary" style="padding: 8px 14px;">
+                  ⬆️ Subir a Drive
+                </button>
+                <button type="button" id="btn-gdrive-download" class="btn btn-secondary" style="padding: 8px 14px;">
+                  ⬇️ Descargar de Drive
                 </button>
                 <button type="button" id="btn-gdrive-check-remote" class="btn btn-secondary" title="Comprobar si hay una copia más reciente en la nube" style="padding: 8px 12px;">
-                  🔄 Comprobar Nube
+                  👁️ Comprobar Nube
                 </button>
               </div>
 
@@ -808,7 +821,14 @@
         <div class="ssh-sidebar">
           <div class="ssh-list-header">
             <span>Perfiles Guardados</span>
-            <button id="btn-ssh-add-new" class="btn btn-sm btn-primary">+ Nuevo</button>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" id="btn-ssh-sync-now" class="btn btn-sm btn-secondary" title="Sincronizar perfiles con Google Drive ahora">🔄 Sincronizar</button>
+              <button type="button" id="btn-ssh-add-new" class="btn btn-sm btn-primary">+ Nuevo</button>
+            </div>
+          </div>
+          <div class="ssh-search-container" style="position: relative; margin-bottom: 8px;">
+            <input type="text" id="ssh-search-input" placeholder="🔍 Buscar por nombre, usuario o IP..." style="width: 100%; font-size: 11px; padding: 6px 26px 6px 8px; border-radius: 5px; border: 1px solid var(--border-color); background: var(--bg-dark); color: var(--text-main);" />
+            <button type="button" id="btn-ssh-search-clear" class="btn-search-clear hidden" title="Limpiar búsqueda" style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 2px 4px; line-height: 1;">✕</button>
           </div>
           <div id="ssh-profiles-list" class="profiles-list"></div>
         </div>
@@ -878,7 +898,10 @@
             </div>
 
             <div class="form-actions">
-              <button type="button" id="btn-ssh-delete" class="btn btn-danger hidden">Eliminar</button>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="btn-ssh-delete" class="btn btn-danger hidden">Eliminar</button>
+                <button type="button" id="btn-ssh-clone" class="btn btn-secondary hidden" title="Duplicar este perfil como uno nuevo">📋 Clonar</button>
+              </div>
               <div class="form-actions-right">
                 <button type="button" id="btn-ssh-test" class="btn btn-secondary"
                   title="Probar conexión con este host y credenciales">⚡ Probar Conexión</button>
@@ -1231,6 +1254,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
 
   <!-- Core App Scripts -->
   <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>

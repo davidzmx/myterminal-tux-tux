@@ -63,7 +63,11 @@ contextBridge.exposeInMainWorld('api', {
     checkRemote: () => ipcRenderer.invoke('gdrive:check-remote'),
     uploadSync: (masterPassword) => ipcRenderer.invoke('gdrive:upload-sync', { masterPassword }),
     downloadSync: (masterPassword) => ipcRenderer.invoke('gdrive:download-sync', { masterPassword }),
-    saveOptions: (options) => ipcRenderer.invoke('gdrive:save-sync-options', options)
+    syncNow: (masterPassword) => ipcRenderer.invoke('gdrive:sync-now', { masterPassword }),
+    saveOptions: (options) => ipcRenderer.invoke('gdrive:save-sync-options', options),
+    autoPull: () => ipcRenderer.invoke('gdrive:auto-pull'),
+    setMasterPassword: (masterPassword) => ipcRenderer.invoke('gdrive:set-master-password', { masterPassword }),
+    clearMasterPassword: () => ipcRenderer.invoke('gdrive:clear-master-password')
   },
 
   // System & Application

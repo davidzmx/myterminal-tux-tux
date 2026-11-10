@@ -98,6 +98,7 @@ class TuxTerminalApp {
     this.btnToggleSshPwd = document.getElementById('btn-toggle-ssh-pwd');
     this.btnToggleSshPhrase = document.getElementById('btn-toggle-ssh-phrase');
     this.btnSshDelete = document.getElementById('btn-ssh-delete');
+    this.btnSshClone = document.getElementById('btn-ssh-clone');
     this.btnSshConnectActive = document.getElementById('btn-ssh-connect-active');
     this.btnSshTest = document.getElementById('btn-ssh-test');
     this.sshTestResult = document.getElementById('ssh-test-result');
@@ -118,6 +119,10 @@ class TuxTerminalApp {
 
     // Git Form
     this.gitUserForm = document.getElementById('git-user-form');
+
+    // State for SSH Search & Cloud Syncing
+    this.sshSearchQuery = '';
+    this.isSyncing = false;
   }
 
   async loadInitialData() {
@@ -177,6 +182,25 @@ class TuxTerminalApp {
 
     // Initialize cloud sync status in top bar & status bar
     this.refreshGDriveUI();
+
+    // Auto pull from Google Drive if there are newer changes from another machine
+    setTimeout(() => {
+      this.autoSyncPullIfAvailable(false);
+    }, 1500);
+
+    // Periodic check for cloud updates (every 90s)
+    setInterval(() => {
+      this.autoSyncPullIfAvailable(true);
+    }, 90000);
+
+    // Check for updates when app window regains focus
+    window.addEventListener('focus', () => {
+      const now = Date.now();
+      if (!this.lastFocusSyncCheck || (now - this.lastFocusSyncCheck) > 35000) {
+        this.lastFocusSyncCheck = now;
+        this.autoSyncPullIfAvailable(true);
+      }
+    });
 
     // Polling git info every 2.5s for terminals
     setInterval(() => {
@@ -368,10 +392,57 @@ class TuxTerminalApp {
       });
     }
 
+    const btnCloudSyncNow = document.getElementById('btn-cloud-sync-now');
+    if (btnCloudSyncNow) {
+      btnCloudSyncNow.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.triggerSyncNow();
+      });
+    }
+
     const statusCloud = document.getElementById('status-cloud-indicator');
     if (statusCloud) {
       statusCloud.addEventListener('click', () => {
-        this.openSettingsModal('tab-gdrive-opts');
+        this.triggerSyncNow();
+      });
+    }
+
+    const btnSshSyncNow = document.getElementById('btn-ssh-sync-now');
+    if (btnSshSyncNow) {
+      btnSshSyncNow.addEventListener('click', () => {
+        this.triggerSyncNow();
+      });
+    }
+
+    const btnGdriveSyncNow = document.getElementById('btn-gdrive-sync-now');
+    if (btnGdriveSyncNow) {
+      btnGdriveSyncNow.addEventListener('click', () => {
+        this.triggerSyncNow();
+      });
+    }
+
+    // SSH Profiles Search
+    const sshSearchInput = document.getElementById('ssh-search-input');
+    const sshSearchClear = document.getElementById('btn-ssh-search-clear');
+    if (sshSearchInput) {
+      sshSearchInput.addEventListener('input', (e) => {
+        this.sshSearchQuery = e.target.value.trim().toLowerCase();
+        if (sshSearchClear) {
+          if (this.sshSearchQuery) sshSearchClear.classList.remove('hidden');
+          else sshSearchClear.classList.add('hidden');
+        }
+        this.renderSshProfilesList();
+      });
+    }
+    if (sshSearchClear) {
+      sshSearchClear.addEventListener('click', () => {
+        if (sshSearchInput) {
+          sshSearchInput.value = '';
+          this.sshSearchQuery = '';
+          sshSearchClear.classList.add('hidden');
+          sshSearchInput.focus();
+          this.renderSshProfilesList();
+        }
       });
     }
 
@@ -653,6 +724,12 @@ class TuxTerminalApp {
     document.getElementById('btn-ssh-add-new').addEventListener('click', () => {
       this.clearSshForm();
     });
+
+    if (this.btnSshClone) {
+      this.btnSshClone.addEventListener('click', () => {
+        this.cloneSshProfile();
+      });
+    }
 
     document.getElementById('btn-save-current-session').addEventListener('click', () => {
       this.handleSaveSession();
@@ -1400,9 +1477,25 @@ class TuxTerminalApp {
       }
     });
 
+    document.getElementById('btn-gdrive-clear-pass')?.addEventListener('click', async () => {
+      if (confirm('¿Olvidar la contraseña maestra guardada en este equipo?\nTendrás que ingresarla de nuevo para sincronizar en segundo plano.')) {
+        await window.api.gdrive.clearMasterPassword();
+        const pwdInput = document.getElementById('gdrive-master-password');
+        if (pwdInput) {
+          pwdInput.value = '';
+          pwdInput.placeholder = 'Ingresa tu contraseña de cifrado...';
+        }
+        await this.refreshGDriveUI();
+        this.showGDriveFeedback('Contraseña maestra eliminada de este equipo.', 'info', 'sync');
+      }
+    });
+
     document.getElementById('btn-gdrive-upload')?.addEventListener('click', async () => {
-      const pass = document.getElementById('gdrive-master-password')?.value;
-      if (!pass || pass.trim().length === 0) {
+      const inputVal = document.getElementById('gdrive-master-password')?.value;
+      const status = await window.api.gdrive.getStatus();
+      const pass = (inputVal && inputVal.trim()) || '';
+
+      if (!pass && !status?.hasMasterPassword) {
         this.showGDriveFeedback('⚠️ Debes ingresar una Contraseña Maestra para cifrar los datos antes de subir.', 'error', 'sync');
         document.getElementById('gdrive-master-password')?.focus();
         return;
@@ -1414,7 +1507,7 @@ class TuxTerminalApp {
       btn.innerHTML = '<span>⏳</span> Cifrando y subiendo a Drive...';
 
       try {
-        const res = await window.api.gdrive.uploadSync(pass.trim());
+        const res = await window.api.gdrive.uploadSync(pass);
         if (res.success) {
           this.showGDriveFeedback(
             `✓ ¡Sincronizado con éxito en Google Drive! (${res.stats.profilesCount} perfiles SSH, ${res.stats.sessionsCount} sesiones empaquetadas y cifradas con AES-256).`,
@@ -1434,8 +1527,11 @@ class TuxTerminalApp {
     });
 
     document.getElementById('btn-gdrive-download')?.addEventListener('click', async () => {
-      const pass = document.getElementById('gdrive-master-password')?.value;
-      if (!pass || pass.trim().length === 0) {
+      const inputVal = document.getElementById('gdrive-master-password')?.value;
+      const status = await window.api.gdrive.getStatus();
+      const pass = (inputVal && inputVal.trim()) || '';
+
+      if (!pass && !status?.hasMasterPassword) {
         this.showGDriveFeedback('⚠️ Debes ingresar la Contraseña Maestra para descifrar los datos descargados.', 'error', 'sync');
         document.getElementById('gdrive-master-password')?.focus();
         return;
@@ -1447,7 +1543,7 @@ class TuxTerminalApp {
       btn.innerHTML = '<span>⏳</span> Descargando y descifrando...';
 
       try {
-        const res = await window.api.gdrive.downloadSync(pass.trim());
+        const res = await window.api.gdrive.downloadSync(pass);
         if (res.success) {
           if (res.data) {
             if (res.data.config) {
@@ -1576,6 +1672,7 @@ class TuxTerminalApp {
         hasClientBox?.classList.add('hidden');
       }
 
+      const cloudStatusGroup = document.getElementById('cloud-status-group');
       const btnCloudStatus = document.getElementById('btn-cloud-status');
       const cloudStatusText = document.getElementById('cloud-status-text');
       const statusCloudIndicator = document.getElementById('status-cloud-indicator');
@@ -1587,26 +1684,26 @@ class TuxTerminalApp {
         if (userEmailEl) userEmailEl.textContent = status.userEmail || 'Usuario conectado';
 
         // Update Top Bar Cloud Status Button
+        if (cloudStatusGroup) cloudStatusGroup.classList.remove('hidden');
         if (btnCloudStatus) {
-          btnCloudStatus.classList.remove('hidden');
           const shortUser = status.userEmail ? status.userEmail.split('@')[0] : 'Drive';
-          if (cloudStatusText) cloudStatusText.textContent = `Drive: ${shortUser}`;
-          btnCloudStatus.title = `Google Drive: Conectado como ${status.userEmail || 'Usuario'}. Clic para gestionar sincronización.`;
+          if (!this.isSyncing && cloudStatusText) cloudStatusText.textContent = `Drive: ${shortUser}`;
+          btnCloudStatus.title = `Google Drive: Conectado (${status.userEmail}). Clic para ver opciones.`;
         }
 
         // Update Footer Status Bar
         if (statusCloudIndicator) {
           statusCloudIndicator.classList.remove('hidden');
-          if (statusCloudText) {
+          if (!this.isSyncing && statusCloudText) {
             statusCloudText.textContent = `☁️ Drive: ${status.userEmail || 'Conectado'}`;
           }
-          statusCloudIndicator.title = `Google Drive: Conectado (${status.userEmail}). Clic para ver sincronización.`;
+          statusCloudIndicator.title = `Google Drive: Conectado (${status.userEmail}). Clic para sincronizar ahora.`;
         }
       } else {
         notLoggedBox?.classList.remove('hidden');
         loggedBox?.classList.add('hidden');
 
-        if (btnCloudStatus) btnCloudStatus.classList.add('hidden');
+        if (cloudStatusGroup) cloudStatusGroup.classList.add('hidden');
         if (statusCloudIndicator) statusCloudIndicator.classList.add('hidden');
       }
 
@@ -1625,6 +1722,21 @@ class TuxTerminalApp {
       }
       if (chkSsh) {
         chkSsh.checked = status.cloudSyncConfig?.autoSyncOnSshSave !== false;
+      }
+
+      // Indicator for stored master password on this machine
+      const masterSavedPill = document.getElementById('gdrive-master-saved-pill');
+      const passInput = document.getElementById('gdrive-master-password');
+      if (status.hasMasterPassword) {
+        masterSavedPill?.classList.remove('hidden');
+        if (passInput && !passInput.value) {
+          passInput.placeholder = '•••••••• (Contraseña guardada en este equipo)';
+        }
+      } else {
+        masterSavedPill?.classList.add('hidden');
+        if (passInput && passInput.placeholder.includes('guardada')) {
+          passInput.placeholder = 'Ingresa tu contraseña de cifrado...';
+        }
       }
 
       if (status.isAuthenticated) {
@@ -1646,6 +1758,96 @@ class TuxTerminalApp {
     }
   }
 
+  setSyncingState(isSyncing, success = true) {
+    this.isSyncing = isSyncing;
+    const btnCloudStatus = document.getElementById('btn-cloud-status');
+    const cloudStatusText = document.getElementById('cloud-status-text');
+    const statusCloudText = document.getElementById('status-cloud-text');
+    const topSyncIcon = document.getElementById('top-sync-icon');
+    const leds = document.querySelectorAll('.cloud-status-led');
+    const btnGdriveSync = document.getElementById('btn-gdrive-sync-now');
+    const btnSshSync = document.getElementById('btn-ssh-sync-now');
+
+    if (isSyncing) {
+      if (btnCloudStatus) btnCloudStatus.classList.add('is-syncing');
+      if (cloudStatusText) cloudStatusText.textContent = 'Sincronizando...';
+      if (statusCloudText) statusCloudText.textContent = '☁️ Sincronizando...';
+      if (topSyncIcon) topSyncIcon.classList.add('spin');
+      leds.forEach((led) => led.classList.add('syncing'));
+      if (btnGdriveSync) {
+        btnGdriveSync.disabled = true;
+        btnGdriveSync.textContent = '⏳ Sincronizando...';
+      }
+      if (btnSshSync) {
+        btnSshSync.disabled = true;
+        btnSshSync.textContent = '⏳ Sincronizando...';
+      }
+    } else {
+      if (btnCloudStatus) btnCloudStatus.classList.remove('is-syncing');
+      if (topSyncIcon) topSyncIcon.classList.remove('spin');
+      leds.forEach((led) => led.classList.remove('syncing'));
+      if (btnGdriveSync) {
+        btnGdriveSync.disabled = false;
+        btnGdriveSync.textContent = '🔄 Sincronizar Ahora';
+      }
+      if (btnSshSync) {
+        btnSshSync.disabled = false;
+        btnSshSync.textContent = '🔄 Sincronizar';
+      }
+
+      if (success) {
+        if (cloudStatusText) cloudStatusText.textContent = '✓ Sincronizado';
+        if (statusCloudText) statusCloudText.textContent = '☁️ Sincronizado';
+        setTimeout(() => {
+          this.refreshGDriveUI();
+        }, 2200);
+      } else {
+        this.refreshGDriveUI();
+      }
+    }
+  }
+
+  async triggerSyncNow() {
+    if (this.isSyncing) return;
+    try {
+      const status = await window.api.gdrive.getStatus();
+      if (!status || !status.isAuthenticated) {
+        this.showCloudToast('⚠️ Inicia sesión en Google Drive en Ajustes para sincronizar.');
+        this.openSettingsModal('tab-gdrive-opts');
+        return;
+      }
+
+      const masterPassInput = document.getElementById('gdrive-master-password')?.value;
+      const masterPass = (masterPassInput && masterPassInput.trim()) || '';
+
+      if (!masterPass && !status.hasMasterPassword) {
+        this.showCloudToast('⚠️ Ingresa tu contraseña maestra en Ajustes > Google Drive para sincronizar.');
+        this.openSettingsModal('tab-gdrive-opts');
+        document.getElementById('gdrive-master-password')?.focus();
+        return;
+      }
+
+      this.setSyncingState(true);
+      const res = await window.api.gdrive.syncNow(masterPass);
+
+      if (res && res.success) {
+        if (Array.isArray(res.profiles)) {
+          this.profiles = res.profiles;
+          this.renderSshProfilesList();
+        }
+        this.setSyncingState(false, true);
+        this.showCloudToast(`✓ Sincronizado con Google Drive (${res.stats?.profilesCount || 0} perfiles al día)`);
+        await this.refreshGDriveUI();
+      } else {
+        this.setSyncingState(false, false);
+        this.showCloudToast(`❌ Error al sincronizar: ${res?.error || 'Desconocido'}`);
+      }
+    } catch (err) {
+      this.setSyncingState(false, false);
+      this.showCloudToast(`❌ Error al sincronizar: ${err.message}`);
+    }
+  }
+
   async triggerAutoCloudSync(reason) {
     try {
       if (!window.api || !window.api.gdrive) return;
@@ -1656,14 +1858,67 @@ class TuxTerminalApp {
       if (reason === 'ssh' && !status.cloudSyncConfig.autoSyncOnSshSave) return;
       if (reason === 'exit' && !status.cloudSyncConfig.autoSyncOnExit) return;
 
-      const masterPass = document.getElementById('gdrive-master-password')?.value;
-      if (!masterPass || masterPass.trim().length === 0) return;
+      const masterPassInput = document.getElementById('gdrive-master-password')?.value;
+      const masterPass = (masterPassInput && masterPassInput.trim()) || '';
 
-      await window.api.gdrive.uploadSync(masterPass.trim());
-      console.log('Sincronización automática con Google Drive completada.');
+      if (!masterPass && !status.hasMasterPassword) {
+        console.warn('Auto-sync omitido: no hay contraseña maestra disponible.');
+        return;
+      }
+
+      this.setSyncingState(true);
+      const res = await window.api.gdrive.uploadSync(masterPass);
+      if (res && res.success) {
+        console.log(`Sincronización automática con Google Drive (${reason}) completada.`);
+        this.setSyncingState(false, true);
+        await this.refreshGDriveUI();
+      } else if (res && !res.success) {
+        this.setSyncingState(false, false);
+        console.warn('Auto-sync a Google Drive no completado:', res.error);
+      }
     } catch (e) {
+      this.setSyncingState(false, false);
       console.warn('Auto-sync a Google Drive omitido:', e.message);
     }
+  }
+
+  async autoSyncPullIfAvailable(silent = false) {
+    try {
+      if (!window.api || !window.api.gdrive || !window.api.gdrive.autoPull) return;
+      const res = await window.api.gdrive.autoPull();
+      if (res && res.updated && Array.isArray(res.profiles)) {
+        this.setSyncingState(true);
+        this.profiles = res.profiles;
+        this.renderSshProfilesList();
+        this.updateStatusBar();
+        this.setSyncingState(false, true);
+        if (!silent) {
+          this.showCloudToast('☁️ Perfiles SSH sincronizados desde Google Drive');
+        }
+        await this.refreshGDriveUI();
+      }
+    } catch (e) {
+      console.warn('Auto-pull check omitido:', e.message);
+    }
+  }
+
+  showCloudToast(message, duration = 3500) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<span>${this.escapeHtml(message)}</span>`;
+    container.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
   }
 
   async saveGeneralConfig() {
@@ -4703,28 +4958,167 @@ class TuxTerminalApp {
   }
 
   openSshModal() {
+    this.sshSearchQuery = '';
+    const searchInput = document.getElementById('ssh-search-input');
+    if (searchInput) searchInput.value = '';
+    const searchClear = document.getElementById('btn-ssh-search-clear');
+    if (searchClear) searchClear.classList.add('hidden');
+
     this.renderSshProfilesList();
     this.clearSshForm();
     this.openModal(this.modalSsh);
+    this.autoSyncPullIfAvailable(true);
   }
 
   renderSshProfilesList() {
     this.sshProfilesListEl.innerHTML = '';
-    this.profiles.forEach((p) => {
+    const currentActiveId = document.getElementById('ssh-id')?.value;
+    const q = (this.sshSearchQuery || '').trim().toLowerCase();
+
+    const list = q
+      ? this.profiles.filter((p) => {
+          const n = (p.name || '').toLowerCase();
+          const u = (p.username || '').toLowerCase();
+          const h = (p.host || '').toLowerCase();
+          return n.includes(q) || u.includes(q) || h.includes(q);
+        })
+      : this.profiles;
+
+    if (q && list.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = 'padding: 20px 10px; text-align: center; color: var(--text-dim); font-size: 11px;';
+      emptyDiv.innerHTML = `No se encontraron perfiles que coincidan con "<b>${this.escapeHtml(q)}</b>"`;
+      this.sshProfilesListEl.appendChild(emptyDiv);
+      return;
+    }
+
+    list.forEach((p, idx) => {
       const card = document.createElement('div');
-      card.className = 'profile-card';
+      card.className = 'profile-card' + (currentActiveId === p.id ? ' active' : '');
+      card.setAttribute('draggable', 'true');
+      card.setAttribute('data-id', p.id);
+
       const hasPwd = Boolean(p.password || p.passphrase);
+      const isFirst = idx === 0;
+      const isLast = idx === list.length - 1;
+
+      const portStr = (p.port && Number(p.port) !== 22) ? `:${p.port}` : '';
+      const fullConn = `${p.username}@${p.host}${portStr}`;
+
       card.innerHTML = `
-        <div class="profile-card-name">${p.name} ${hasPwd ? '🔒' : ''}</div>
-        <div class="profile-card-details">${p.username}@${p.host}:${p.port || 22}</div>
+        <div class="profile-drag-handle" title="Arrastra para reordenar">⋮⋮</div>
+        <div class="profile-card-content">
+          <div class="profile-card-name" title="${this.escapeHtml(p.name)}">${this.escapeHtml(p.name)} ${hasPwd ? '🔒' : ''}</div>
+          <div class="profile-card-details" title="${this.escapeHtml(fullConn)}">${this.escapeHtml(fullConn)}</div>
+        </div>
+        <div class="profile-card-actions">
+          <button type="button" class="btn-card-action btn-card-up" title="Mover arriba" ${isFirst ? 'disabled' : ''}>▲</button>
+          <button type="button" class="btn-card-action btn-card-down" title="Mover abajo" ${isLast ? 'disabled' : ''}>▼</button>
+          <button type="button" class="btn-card-action btn-card-clone" title="Clonar perfil">📋</button>
+        </div>
       `;
-      card.addEventListener('click', () => {
+
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.profile-card-actions') || e.target.closest('.profile-drag-handle')) return;
         document.querySelectorAll('.profile-card').forEach((c) => c.classList.remove('active'));
         card.classList.add('active');
         this.fillSshForm(p);
       });
+
+      const cloneBtn = card.querySelector('.btn-card-clone');
+      if (cloneBtn) {
+        cloneBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.cloneSshProfile(p);
+        });
+      }
+
+      const upBtn = card.querySelector('.btn-card-up');
+      if (upBtn) {
+        upBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.moveProfile(p.id, -1);
+        });
+      }
+
+      const downBtn = card.querySelector('.btn-card-down');
+      if (downBtn) {
+        downBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.moveProfile(p.id, 1);
+        });
+      }
+
+      // Drag and drop events for reordering
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', p.id);
+        e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('is-dragging');
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('is-dragging');
+        document.querySelectorAll('.profile-card').forEach((c) => c.classList.remove('drag-over-above', 'drag-over-below'));
+      });
+
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = card.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          card.classList.add('drag-over-above');
+          card.classList.remove('drag-over-below');
+        } else {
+          card.classList.add('drag-over-below');
+          card.classList.remove('drag-over-above');
+        }
+      });
+
+      card.addEventListener('dragleave', () => {
+        card.classList.remove('drag-over-above', 'drag-over-below');
+      });
+
+      card.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        card.classList.remove('drag-over-above', 'drag-over-below');
+        const draggedId = e.dataTransfer.getData('text/plain');
+        if (!draggedId || draggedId === p.id) return;
+
+        const fromIndex = this.profiles.findIndex((pr) => pr.id === draggedId);
+        let toIndex = this.profiles.findIndex((pr) => pr.id === p.id);
+        if (fromIndex === -1 || toIndex === -1) return;
+
+        const rect = card.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY >= midY && toIndex < this.profiles.length - 1 && fromIndex < toIndex) {
+          toIndex++;
+        }
+
+        const [moved] = this.profiles.splice(fromIndex, 1);
+        this.profiles.splice(toIndex, 0, moved);
+
+        await window.api.saveProfiles(this.profiles);
+        this.renderSshProfilesList();
+        this.triggerAutoCloudSync('ssh');
+      });
+
       this.sshProfilesListEl.appendChild(card);
     });
+  }
+
+  async moveProfile(profileId, direction) {
+    const idx = this.profiles.findIndex((p) => p.id === profileId);
+    if (idx === -1) return;
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= this.profiles.length) return;
+
+    const [moved] = this.profiles.splice(idx, 1);
+    this.profiles.splice(targetIdx, 0, moved);
+
+    await window.api.saveProfiles(this.profiles);
+    this.renderSshProfilesList();
+    this.triggerAutoCloudSync('ssh');
   }
 
   clearSshForm() {
@@ -4745,6 +5139,7 @@ class TuxTerminalApp {
     this.sshPassphraseGroup.style.display = 'none';
     this.sshPasswordGroup.style.display = 'block';
     this.btnSshDelete.classList.add('hidden');
+    if (this.btnSshClone) this.btnSshClone.classList.add('hidden');
     document.querySelectorAll('.profile-card').forEach((c) => c.classList.remove('active'));
     if (this.sshTestResult) {
       this.sshTestResult.className = 'ssh-test-result-box hidden';
@@ -4771,10 +5166,47 @@ class TuxTerminalApp {
     this.sshPasswordGroup.style.display = isKey ? 'none' : 'block';
 
     this.btnSshDelete.classList.remove('hidden');
+    if (this.btnSshClone) this.btnSshClone.classList.remove('hidden');
     if (this.sshTestResult) {
       this.sshTestResult.className = 'ssh-test-result-box hidden';
       this.sshTestResult.textContent = '';
     }
+
+    document.querySelectorAll('.profile-card').forEach((c) => {
+      if (c.getAttribute('data-id') === p.id) {
+        c.classList.add('active');
+        c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        c.classList.remove('active');
+      }
+    });
+  }
+
+  async cloneSshProfile(sourceProfile) {
+    const src = sourceProfile || this.getSelectedFormProfile();
+    if (!src || !src.name) return;
+
+    const cloned = {
+      ...JSON.parse(JSON.stringify(src)),
+      id: 'ssh_' + Math.random().toString(36).substring(2, 9),
+      name: `${src.name} (Copia)`
+    };
+
+    this.profiles.push(cloned);
+    await window.api.saveProfiles(this.profiles);
+    const sshIdInput = document.getElementById('ssh-id');
+    if (sshIdInput) sshIdInput.value = cloned.id;
+    this.renderSshProfilesList();
+    this.fillSshForm(cloned);
+
+    const nameInput = document.getElementById('ssh-name');
+    if (nameInput) {
+      nameInput.focus();
+      nameInput.select();
+    }
+
+    this.showCloudToast(`📋 Perfil clonado: ${cloned.name}`);
+    this.triggerAutoCloudSync('ssh');
   }
 
   getSelectedFormProfile() {
@@ -4882,13 +5314,16 @@ class TuxTerminalApp {
   async handleDeleteSshProfile() {
     const id = document.getElementById('ssh-id').value;
     if (!id) return;
-    if (!confirm('¿Seguro que deseas eliminar este perfil SSH?')) return;
+    const profile = this.profiles.find((p) => p.id === id);
+    const profileName = profile?.name || document.getElementById('ssh-name')?.value.trim() || 'este perfil';
+    if (!confirm(`¿Seguro que deseas eliminar el perfil SSH "${profileName}"? Esta acción no se puede deshacer.`)) return;
 
     this.profiles = this.profiles.filter((p) => p.id !== id);
     await window.api.saveProfiles(this.profiles);
     this.renderSshProfilesList();
     this.clearSshForm();
     this.triggerAutoCloudSync('ssh');
+    this.showCloudToast(`🗑️ Perfil "${profileName}" eliminado`);
   }
 
   // ================= GENERAL SESSIONS =================
