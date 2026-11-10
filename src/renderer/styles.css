@@ -531,6 +531,19 @@ body.theme-light .ssh-badge-host {
   }
 }
 
+@keyframes ssh-led-amber-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 6px #f59e0b, 0 0 2px #fbbf24;
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.8);
+    box-shadow: 0 0 1px #f59e0b;
+  }
+}
+
 .ssh-active-led {
   display: inline-block;
   width: 7px;
@@ -539,7 +552,24 @@ body.theme-light .ssh-badge-host {
   background-color: #22c55e;
   margin: 0 2px;
   flex-shrink: 0;
-  animation: ssh-led-blink 1.25s infinite ease-in-out;
+  box-shadow: 0 0 6px #22c55e, 0 0 2px #4ade80;
+}
+
+.ssh-active-led.connecting {
+  background-color: #f59e0b !important;
+  animation: ssh-led-amber-blink 0.9s infinite ease-in-out !important;
+}
+
+.ssh-disconnect-btn.btn-cancel {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.ssh-disconnect-btn.btn-cancel:hover {
+  background: rgba(245, 158, 11, 0.35);
+  border-color: #f59e0b;
+  color: #fff;
 }
 
 .tab-ssh-led {

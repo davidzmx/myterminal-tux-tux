@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('api', {
   // SSH Profiles
   getProfiles: () => ipcRenderer.invoke('profiles:get'),
   saveProfiles: (profiles) => ipcRenderer.invoke('profiles:save', profiles),
+  recordDeletedProfile: (id) => ipcRenderer.invoke('profiles:record-deleted', id),
   testSshConnection: (profile) => ipcRenderer.invoke('ssh:test-connection', profile),
 
   // Saved Sessions (overall layouts)

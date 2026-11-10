@@ -79,21 +79,56 @@ function clearMasterPassword() {
   }
 }
 
-function mergeProfiles(localProfiles = [], remoteProfiles = []) {
-  const map = new Map();
-  // Los perfiles descargados de Google Drive (remotos) forman la base
-  for (const p of remoteProfiles) {
-    if (p && p.id) {
-      map.set(p.id, p);
+function mergeProfiles(localProfiles = [], remoteProfiles = [], deletedProfileIds = []) {
+  if (!remoteProfiles || remoteProfiles.length === 0) return localProfiles;
+  const deletedSet = new Set(deletedProfileIds || []);
+  if (!localProfiles || localProfiles.length === 0) {
+    return remoteProfiles.filter((p) => p && p.id && !deletedSet.has(p.id));
+  }
+
+  const remoteMap = new Map();
+  for (const r of remoteProfiles) {
+    if (r && r.id && !deletedSet.has(r.id)) {
+      remoteMap.set(r.id, r);
     }
   }
-  // Los perfiles locales que no estén en remoto se conservan (no se pierden nunca)
-  for (const p of localProfiles) {
-    if (p && p.id && !map.has(p.id)) {
-      map.set(p.id, p);
+
+  const result = [];
+  const processedIds = new Set();
+
+  // 1. Recorrer los perfiles locales primero (respetando estrictamente el orden y cambios locales)
+  for (const local of localProfiles) {
+    if (!local || !local.id || deletedSet.has(local.id)) continue;
+    processedIds.add(local.id);
+
+    const remote = remoteMap.get(local.id);
+    if (!remote) {
+      // Perfil local que no está en remoto -> conservar local
+      result.push(local);
+    } else {
+      // Perfil que está en ambos: comparar timestamp updatedAt
+      const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+      const remoteTime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+
+      // Si el remoto es estrictamente más nuevo (modificado en otro equipo posteriormente), usar remoto.
+      // Si local es igual o más nuevo (o no tienen timestamp), usar local (conserva el nombre editado, orden, etc.)
+      if (remoteTime > localTime) {
+        result.push(remote);
+      } else {
+        result.push(local);
+      }
     }
   }
-  return Array.from(map.values());
+
+  // 2. Añadir perfiles remotos que no existan localmente (creados en otra máquina para no perderlos)
+  for (const remote of remoteProfiles) {
+    if (remote && remote.id && !processedIds.has(remote.id) && !deletedSet.has(remote.id)) {
+      result.push(remote);
+      processedIds.add(remote.id);
+    }
+  }
+
+  return result;
 }
 
 let pty;
@@ -894,7 +929,8 @@ function registerIpcHandlers() {
             const { content } = await gdriveService.downloadSyncFile();
             const remoteData = decryptSyncPayload(content, pass);
             if (remoteData && Array.isArray(remoteData.profiles)) {
-              profiles = mergeProfiles(profiles, remoteData.profiles);
+              const deletedIds = config.cloudSync?.deletedProfileIds || [];
+              profiles = mergeProfiles(profiles, remoteData.profiles, deletedIds);
               saveJsonFile('ssh-profiles.json', profiles);
             }
             if (remoteData && remoteData.sessions && typeof remoteData.sessions === 'object') {
@@ -934,6 +970,7 @@ function registerIpcHandlers() {
         success: true,
         modifiedTime: config.cloudSync.lastSync,
         action: uploadRes.action,
+        profiles,
         stats: {
           profilesCount: profiles.length,
           sessionsCount: Object.keys(sessions).length,
@@ -986,7 +1023,8 @@ function registerIpcHandlers() {
 
       if (Array.isArray(data.profiles)) {
         const localProfiles = loadJsonFile('ssh-profiles.json', []);
-        const mergedProfiles = mergeProfiles(localProfiles, data.profiles);
+        const deletedIds = data.config?.cloudSync?.deletedProfileIds || getUserConfig().cloudSync?.deletedProfileIds || [];
+        const mergedProfiles = mergeProfiles(localProfiles, data.profiles, deletedIds);
         saveJsonFile('ssh-profiles.json', mergedProfiles);
         data.profiles = mergedProfiles;
       }
@@ -1050,7 +1088,8 @@ function registerIpcHandlers() {
       }
 
       const localProfiles = loadJsonFile('ssh-profiles.json', []);
-      const mergedProfiles = mergeProfiles(localProfiles, Array.isArray(data.profiles) ? data.profiles : []);
+      const deletedIds = cfg.cloudSync?.deletedProfileIds || [];
+      const mergedProfiles = mergeProfiles(localProfiles, Array.isArray(data.profiles) ? data.profiles : [], deletedIds);
       saveJsonFile('ssh-profiles.json', mergedProfiles);
 
       if (data.sessions && typeof data.sessions === 'object') {
@@ -1108,7 +1147,8 @@ function registerIpcHandlers() {
 
           if (remoteData && typeof remoteData === 'object') {
             if (Array.isArray(remoteData.profiles)) {
-              localProfiles = mergeProfiles(localProfiles, remoteData.profiles);
+              const deletedIds = config.cloudSync?.deletedProfileIds || [];
+              localProfiles = mergeProfiles(localProfiles, remoteData.profiles, deletedIds);
               saveJsonFile('ssh-profiles.json', localProfiles);
             }
             if (remoteData.sessions && typeof remoteData.sessions === 'object') {
@@ -1366,7 +1406,33 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('profiles:save', (event, profiles) => {
+    // Si algún perfil guardado estaba marcado como borrado, desmarcarlo
+    if (Array.isArray(profiles)) {
+      const cfg = getUserConfig();
+      if (cfg.cloudSync?.deletedProfileIds?.length) {
+        const savedIds = new Set(profiles.map(p => p.id));
+        cfg.cloudSync.deletedProfileIds = cfg.cloudSync.deletedProfileIds.filter(id => !savedIds.has(id));
+        saveJsonFile('config.json', cfg);
+      }
+    }
     return saveJsonFile('ssh-profiles.json', profiles);
+  });
+
+  ipcMain.handle('profiles:record-deleted', (event, profileId) => {
+    if (!profileId) return { success: false };
+    const cfg = getUserConfig();
+    if (!cfg.cloudSync) cfg.cloudSync = {};
+    if (!Array.isArray(cfg.cloudSync.deletedProfileIds)) {
+      cfg.cloudSync.deletedProfileIds = [];
+    }
+    if (!cfg.cloudSync.deletedProfileIds.includes(profileId)) {
+      cfg.cloudSync.deletedProfileIds.push(profileId);
+      if (cfg.cloudSync.deletedProfileIds.length > 50) {
+        cfg.cloudSync.deletedProfileIds = cfg.cloudSync.deletedProfileIds.slice(-50);
+      }
+      saveJsonFile('config.json', cfg);
+    }
+    return { success: true };
   });
 
   // SSH Test Connection (checks host/port reachability, banner, and optional authentication)
@@ -1381,12 +1447,14 @@ function registerIpcHandlers() {
     const password = profile.password || '';
     const keyPath = profile.keyPath || '';
     const passphrase = profile.passphrase || '';
+    const timeoutSec = Math.max(5, Math.min(300, parseInt(profile.timeout, 10) || 35));
 
     // Step 1: TCP connection & SSH Protocol Banner
     let banner = '';
     try {
       banner = await new Promise((resolve, reject) => {
-        const socket = net.createConnection({ host, port, timeout: 8000 });
+        const tcpTimeout = Math.min(timeoutSec * 1000, 15000);
+        const socket = net.createConnection({ host, port, timeout: tcpTimeout });
         let received = '';
         socket.on('data', (chunk) => {
           received += chunk.toString();
@@ -1397,7 +1465,7 @@ function registerIpcHandlers() {
         });
         socket.on('timeout', () => {
           socket.destroy();
-          reject(new Error(`Tiempo de espera agotado (8s) al conectar con ${host}:${port}`));
+          reject(new Error(`Tiempo de espera agotado (${Math.round(tcpTimeout / 1000)}s) al conectar con ${host}:${port}`));
         });
         socket.on('error', (err) => {
           socket.destroy();
@@ -1443,14 +1511,14 @@ function registerIpcHandlers() {
         const timer = setTimeout(() => {
           done({
             success: false,
-            error: 'Tiempo de espera agotado esperando autenticación SSH (25s). El servidor tardó demasiado en responder.'
+            error: `Tiempo de espera agotado esperando autenticación SSH (${timeoutSec}s). El servidor tardó demasiado en responder. Puedes aumentar el campo 'Timeout (s)' en el perfil si tu conexión es lenta.`
           });
-        }, 25000);
+        }, timeoutSec * 1000);
 
         const sshArgs = [
           '-p', String(port),
           '-o', 'StrictHostKeyChecking=accept-new',
-          '-o', 'ConnectTimeout=15',
+          '-o', `ConnectTimeout=${Math.min(timeoutSec, 30)}`,
           '-o', 'NumberOfPasswordPrompts=1'
         ];
 
@@ -1460,7 +1528,9 @@ function registerIpcHandlers() {
 
         if (profile.extraArgs && typeof profile.extraArgs === 'string') {
           const parts = profile.extraArgs.trim().split(/\s+/).filter(Boolean);
-          sshArgs.push(...parts);
+          // Omitir banderas de forwarding gráfico o de agente (-X, -x, -Y, -y, -A, -a) en la prueba no interactiva
+          const safeParts = parts.filter((arg) => !/^-[XxYyAa]$/.test(arg));
+          sshArgs.push(...safeParts);
         }
 
         sshArgs.push(`${username}@${host}`, 'echo __MYTERM_SSH_TEST_SUCCESS__');
@@ -1481,6 +1551,7 @@ function registerIpcHandlers() {
           });
         }
 
+        const ansiRegex = /[\u001b\u009b][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d\/#&.:=?%_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d\/#&.:=?%_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
         let output = '';
         let sentSecret = false;
 
@@ -1496,8 +1567,8 @@ function registerIpcHandlers() {
           }
 
           // Eliminar secuencias de escape ANSI para detectar prompts de contraseña con fiabilidad
-          const clean = output.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').trim();
-          const isPrompt = /(password|passphrase|contraseña|password for [^:]+|clave):\s*$/i.test(clean);
+          const clean = output.replace(ansiRegex, '').replace(/[\r\x00]/g, '').trim();
+          const isPrompt = /(password|passphrase|contraseña|password for [^:]+|clave)[:\?]\s*$/im.test(clean);
 
           if (isPrompt && !sentSecret) {
             sentSecret = true;

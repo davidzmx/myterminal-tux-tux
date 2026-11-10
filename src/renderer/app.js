@@ -1869,6 +1869,10 @@ class TuxTerminalApp {
       this.setSyncingState(true);
       const res = await window.api.gdrive.uploadSync(masterPass);
       if (res && res.success) {
+        if (Array.isArray(res.profiles)) {
+          this.profiles = res.profiles;
+          this.renderSshProfilesList();
+        }
         console.log(`Sincronización automática con Google Drive (${reason}) completada.`);
         this.setSyncingState(false, true);
         await this.refreshGDriveUI();
@@ -3523,12 +3527,27 @@ class TuxTerminalApp {
     if (!sshBadge) return;
 
     if (inst && inst.sshSession) {
+      // SESIÓN SSH COMPLETAMENTE AUTENTICADA Y ACTIVA
       const sess = inst.sshSession;
       const nameEl = document.getElementById(`ssh-badge-name-${termId}`);
       const hostEl = document.getElementById(`ssh-badge-host-${termId}`);
+      const ledEl = document.getElementById(`ssh-led-${termId}`) || sshBadge.querySelector('.ssh-active-led');
+      const disconnectBtn = document.getElementById(`ssh-disconnect-${termId}`) || sshBadge.querySelector('.ssh-disconnect-btn');
+
       if (nameEl) nameEl.textContent = sess.name;
       const portStr = (sess.port && Number(sess.port) !== 22) ? `:${sess.port}` : '';
       if (hostEl) hostEl.textContent = `(${sess.username}@${sess.host}${portStr})`;
+
+      if (ledEl) {
+        ledEl.classList.remove('connecting');
+        ledEl.style.backgroundColor = '#22c55e';
+        ledEl.title = 'Sesión SSH activa y autenticada';
+      }
+      if (disconnectBtn) {
+        disconnectBtn.textContent = '✕ Desconectar';
+        disconnectBtn.classList.remove('btn-cancel');
+        disconnectBtn.title = 'Desconectar sesión SSH y volver a la terminal local';
+      }
 
       sshBadge.classList.remove('hidden');
       if (headerEl) headerEl.classList.add('header-ssh');
@@ -3544,6 +3563,41 @@ class TuxTerminalApp {
       if (nonGitBadge) nonGitBadge.classList.add('hidden');
 
       // Keep button actions visible with current group
+      if (gitActions) gitActions.classList.remove('hidden');
+    } else if (inst && inst.pendingSshSession) {
+      // EN PROCESO DE CONEXIÓN O AUTENTICACIÓN (NO LOGUEADO TODAVÍA)
+      const sess = inst.pendingSshSession;
+      const nameEl = document.getElementById(`ssh-badge-name-${termId}`);
+      const hostEl = document.getElementById(`ssh-badge-host-${termId}`);
+      const ledEl = document.getElementById(`ssh-led-${termId}`) || sshBadge.querySelector('.ssh-active-led');
+      const disconnectBtn = document.getElementById(`ssh-disconnect-${termId}`) || sshBadge.querySelector('.ssh-disconnect-btn');
+
+      const isAuth = inst.sshState === 'authenticating';
+      if (nameEl) nameEl.textContent = isAuth ? `Autenticando: ${sess.name}` : `Conectando: ${sess.name}`;
+      const portStr = (sess.port && Number(sess.port) !== 22) ? `:${sess.port}` : '';
+      if (hostEl) hostEl.textContent = `(${sess.username}@${sess.host}${portStr})`;
+
+      if (ledEl) {
+        ledEl.classList.add('connecting');
+        ledEl.style.backgroundColor = '#f59e0b';
+        ledEl.title = isAuth ? 'Esperando respuesta/contraseña del servidor SSH...' : 'Estableciendo conexión SSH con el host...';
+      }
+      if (disconnectBtn) {
+        disconnectBtn.textContent = '✕ Cancelar';
+        disconnectBtn.classList.add('btn-cancel');
+        disconnectBtn.title = 'Cancelar intento de conexión SSH';
+      }
+
+      sshBadge.classList.remove('hidden');
+      // No marcar el encabezado en rojo todavía; mantener color neutro
+      if (headerEl) headerEl.classList.remove('header-ssh');
+
+      if (termLabel) termLabel.classList.add('hidden');
+      if (shellSelect) shellSelect.classList.add('hidden');
+      if (favWrapper) favWrapper.classList.add('hidden');
+      if (branchWrapper) branchWrapper.classList.add('hidden');
+      if (userBtn) userBtn.classList.add('hidden');
+      if (nonGitBadge) nonGitBadge.classList.add('hidden');
       if (gitActions) gitActions.classList.remove('hidden');
     } else {
       sshBadge.classList.add('hidden');
@@ -3565,17 +3619,27 @@ class TuxTerminalApp {
 
   disconnectSshSession(termId) {
     const inst = this.terminals.get(termId);
+    const wasPending = Boolean(inst && inst.pendingSshSession && !inst.sshSession);
     if (inst) {
       if (inst.sshPollTimer) {
         clearInterval(inst.sshPollTimer);
         inst.sshPollTimer = null;
       }
+      if (inst.sshPwdListener) {
+        inst.sshPwdListener();
+        inst.sshPwdListener = null;
+      }
       inst.sshSession = null;
       inst.pendingSshSession = null;
+      inst.sshState = 'none';
       inst.sshShowGit = false;
       inst.title = 'Terminal';
     }
-    window.api.writeTerminal(termId, 'exit\r');
+    if (wasPending) {
+      window.api.writeTerminal(termId, '\x03'); // Ctrl+C para abortar el comando ssh
+    } else {
+      window.api.writeTerminal(termId, 'exit\r');
+    }
     this.updateToolbarSshStatus(termId);
   }
 
@@ -4449,6 +4513,7 @@ class TuxTerminalApp {
         gitInfo: null,
         sshSession: null,
         pendingSshSession: null,
+        sshState: 'none',
         sshPollTimer: null,
         sshShowGit: false,
         activeGroupId: this.config.defaultNonGitGroup || 'group-system',
@@ -4748,7 +4813,7 @@ class TuxTerminalApp {
   }
 
   // ================= SSH PROFILES & PASSWORD AUTO-INJECTION =================
-  setupSshPasswordAutoInjector(termId, secret) {
+  setupSshPasswordAutoInjector(termId, secret, onAuthenticated) {
     const inst = this.terminals.get(termId);
     if (!inst) return;
 
@@ -4757,12 +4822,13 @@ class TuxTerminalApp {
       inst.sshPwdListener = null;
     }
 
+    const ansiRegex = /[\u001b\u009b][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d\/#&.:=?%_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d\/#&.:=?%_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
     let buffer = '';
     let answered = false;
 
     const timeoutId = setTimeout(() => {
       cleanup();
-    }, 30000);
+    }, 60000);
 
     const cleanup = () => {
       clearTimeout(timeoutId);
@@ -4774,22 +4840,40 @@ class TuxTerminalApp {
 
     const unsub = window.api.onTerminalData(termId, (data) => {
       buffer += data;
-      const isPrompt = /(password|passphrase|contraseña|password for [^:]+):\s*$/i.test(buffer.trim());
-      if (isPrompt && !answered) {
-        answered = true;
-        setTimeout(() => {
-          window.api.writeTerminal(termId, `${secret}\r`);
-          cleanup();
+      const clean = buffer.replace(ansiRegex, '').replace(/[\r\x00]/g, '').trim();
+      const isPrompt = /(password|passphrase|contraseña|password for [^:]+|clave)[:\?]\s*$/im.test(clean);
+
+      if (isPrompt) {
+        if (inst.sshState !== 'authenticating') {
+          inst.sshState = 'authenticating';
+          this.updateToolbarSshStatus(termId);
+        }
+
+        if (secret && !answered) {
+          answered = true;
           setTimeout(() => {
-            const currentInst = this.terminals.get(termId);
-            if (currentInst && currentInst.term) currentInst.term.focus();
-          }, 150);
-        }, 120);
+            window.api.writeTerminal(termId, `${secret}\r`);
+            setTimeout(() => {
+              const currentInst = this.terminals.get(termId);
+              if (currentInst && currentInst.term) currentInst.term.focus();
+            }, 150);
+          }, 120);
+        }
+      }
+
+      // Detectar si el inicio de sesión remoto ya se completó con éxito
+      const isRemoteWelcome = /(Last login:|Welcome to|Ubuntu |Debian |CentOS |Red Hat |Fedora |Linux .* GNU\/Linux)/i.test(clean);
+      const isRemotePrompt = /[\w.-]+@[\w.-]+[:\s].*[\$#%>]\s*$/m.test(clean);
+
+      if (isRemoteWelcome || (answered && isRemotePrompt)) {
+        cleanup();
+        if (onAuthenticated) onAuthenticated();
       }
     });
 
     inst.sshPwdListener = () => {
       unsub();
+      cleanup();
     };
   }
 
@@ -4820,30 +4904,57 @@ class TuxTerminalApp {
     }
     sshCmd += ` ${profile.username}@${profile.host}`;
 
-    const secretToSend = profile.authType === 'key' ? (profile.passphrase || '') : (profile.password || '');
-    if (secretToSend) {
-      this.setupSshPasswordAutoInjector(termId, secretToSend);
-    }
-
     if (inst) {
       if (inst.sshPollTimer) {
         clearInterval(inst.sshPollTimer);
         inst.sshPollTimer = null;
       }
+      if (inst.sshPwdListener) {
+        inst.sshPwdListener();
+        inst.sshPwdListener = null;
+      }
       inst.pendingSshSession = profile;
       inst.sshSession = null;
+      inst.sshState = 'connecting';
       inst.sshShowGit = false;
     }
 
-    // Do NOT set header red or show IP yet (only if connection actually succeeds)
+    // Poner la barra en estado "Conectando..." (LED ámbar, sin marco rojo aún)
     this.updateToolbarSshStatus(termId);
     this.updateStatusBar();
+
+    const markConnected = () => {
+      if (!inst || !inst.pendingSshSession || inst.sshSession) return;
+      if (inst.sshPollTimer) {
+        clearInterval(inst.sshPollTimer);
+        inst.sshPollTimer = null;
+      }
+      if (inst.sshPwdListener) {
+        inst.sshPwdListener();
+        inst.sshPwdListener = null;
+      }
+      inst.sshSession = inst.pendingSshSession;
+      inst.pendingSshSession = null;
+      inst.sshState = 'connected';
+      inst.title = `SSH: ${profile.name} (${profile.host})`;
+      this.updateToolbarSshStatus(termId);
+      this.updateStatusBar();
+      setTimeout(() => {
+        if (inst && inst.term) inst.term.focus();
+      }, 60);
+    };
+
+    const secretToSend = profile.authType === 'key' ? (profile.passphrase || '') : (profile.password || '');
+    this.setupSshPasswordAutoInjector(termId, secretToSend, () => {
+      markConnected();
+    });
 
     window.api.writeTerminal(termId, `${sshCmd}\r`);
 
     if (inst) {
       let attempts = 0;
-      const maxAttempts = 60; // 30 seconds
+      const timeoutSec = Math.max(10, Math.min(300, parseInt(profile.timeout, 10) || 35));
+      const maxAttempts = timeoutSec * 2; // chequeo cada 500ms
       inst.sshPollTimer = setInterval(async () => {
         attempts++;
         if (!inst.pendingSshSession) {
@@ -4854,29 +4965,26 @@ class TuxTerminalApp {
 
         try {
           const status = await window.api.getTerminalSshStatus(termId);
-          if (status && status.connected) {
-            // SSH CONNECTION ESTABLISHED SUCCESSFULLY!
-            clearInterval(inst.sshPollTimer);
-            inst.sshPollTimer = null;
-            inst.sshSession = inst.pendingSshSession;
-            inst.pendingSshSession = null;
-            inst.title = `SSH: ${profile.name} (${profile.host})`;
-            this.updateToolbarSshStatus(termId);
-            this.updateStatusBar();
-            setTimeout(() => {
-              if (inst && inst.term) inst.term.focus();
-            }, 60);
-            return;
-          }
 
-          // If child ssh process ended/failed/cancelled
+          // Si el proceso hijo ssh terminó o fue cancelado
           if (attempts > 3 && status && !status.hasSsh) {
             clearInterval(inst.sshPollTimer);
             inst.sshPollTimer = null;
+            if (inst.sshPwdListener) {
+              inst.sshPwdListener();
+              inst.sshPwdListener = null;
+            }
             inst.pendingSshSession = null;
             inst.sshSession = null;
+            inst.sshState = 'none';
             this.updateToolbarSshStatus(termId);
             this.updateStatusBar();
+            return;
+          }
+
+          // Si es autenticación por llave sin contraseña y ya pasaron 4 ciclos (2s) con TCP establecido sin solicitud de contraseña
+          if (status && status.connected && !secretToSend && inst.sshState === 'connecting' && attempts >= 4) {
+            markConnected();
             return;
           }
         } catch (e) {}
@@ -4884,10 +4992,18 @@ class TuxTerminalApp {
         if (attempts >= maxAttempts) {
           clearInterval(inst.sshPollTimer);
           inst.sshPollTimer = null;
-          inst.pendingSshSession = null;
-          inst.sshSession = null;
-          this.updateToolbarSshStatus(termId);
-          this.updateStatusBar();
+          const finalStatus = await window.api.getTerminalSshStatus(termId).catch(() => null);
+          if (!finalStatus || !finalStatus.hasSsh) {
+            if (inst.sshPwdListener) {
+              inst.sshPwdListener();
+              inst.sshPwdListener = null;
+            }
+            inst.pendingSshSession = null;
+            inst.sshSession = null;
+            inst.sshState = 'none';
+            this.updateToolbarSshStatus(termId);
+            this.updateStatusBar();
+          }
         }
       }, 500);
     }
@@ -5096,6 +5212,7 @@ class TuxTerminalApp {
         }
 
         const [moved] = this.profiles.splice(fromIndex, 1);
+        moved.updatedAt = new Date().toISOString();
         this.profiles.splice(toIndex, 0, moved);
 
         await window.api.saveProfiles(this.profiles);
@@ -5114,6 +5231,7 @@ class TuxTerminalApp {
     if (targetIdx < 0 || targetIdx >= this.profiles.length) return;
 
     const [moved] = this.profiles.splice(idx, 1);
+    moved.updatedAt = new Date().toISOString();
     this.profiles.splice(targetIdx, 0, moved);
 
     await window.api.saveProfiles(this.profiles);
@@ -5127,6 +5245,8 @@ class TuxTerminalApp {
     document.getElementById('ssh-name').value = '';
     document.getElementById('ssh-host').value = '';
     document.getElementById('ssh-port').value = '22';
+    const timeoutInput = document.getElementById('ssh-timeout');
+    if (timeoutInput) timeoutInput.value = '35';
     document.getElementById('ssh-username').value = '';
     document.getElementById('ssh-auth-type').value = 'password';
     document.getElementById('ssh-password').value = '';
@@ -5153,6 +5273,8 @@ class TuxTerminalApp {
     document.getElementById('ssh-name').value = p.name;
     document.getElementById('ssh-host').value = p.host;
     document.getElementById('ssh-port').value = p.port || 22;
+    const timeoutInput = document.getElementById('ssh-timeout');
+    if (timeoutInput) timeoutInput.value = p.timeout || 35;
     document.getElementById('ssh-username').value = p.username;
     document.getElementById('ssh-auth-type').value = p.authType || 'password';
     document.getElementById('ssh-password').value = p.password || '';
@@ -5189,7 +5311,8 @@ class TuxTerminalApp {
     const cloned = {
       ...JSON.parse(JSON.stringify(src)),
       id: 'ssh_' + Math.random().toString(36).substring(2, 9),
-      name: `${src.name} (Copia)`
+      name: `${src.name} (Copia)`,
+      updatedAt: new Date().toISOString()
     };
 
     this.profiles.push(cloned);
@@ -5220,6 +5343,7 @@ class TuxTerminalApp {
       name,
       host,
       port: parseInt(document.getElementById('ssh-port').value, 10) || 22,
+      timeout: parseInt(document.getElementById('ssh-timeout')?.value, 10) || 35,
       username,
       authType: document.getElementById('ssh-auth-type').value,
       password: document.getElementById('ssh-password').value,
@@ -5234,6 +5358,7 @@ class TuxTerminalApp {
     const host = document.getElementById('ssh-host').value.trim();
     const username = document.getElementById('ssh-username').value.trim();
     const port = parseInt(document.getElementById('ssh-port').value, 10) || 22;
+    const timeout = parseInt(document.getElementById('ssh-timeout')?.value, 10) || 35;
     const authType = document.getElementById('ssh-auth-type').value;
     const password = document.getElementById('ssh-password').value;
     const keyPath = document.getElementById('ssh-key-path').value.trim();
@@ -5256,12 +5381,13 @@ class TuxTerminalApp {
     this.btnSshTest.innerHTML = '⏳ Probando...';
 
     this.sshTestResult.className = 'ssh-test-result-box testing';
-    this.sshTestResult.innerHTML = `<span>⏳ Conectando con <b>${this.escapeHtml(host)}:${port}</b>...</span>`;
+    this.sshTestResult.innerHTML = `<span>⏳ Conectando con <b>${this.escapeHtml(host)}:${port}</b> (timeout: ${timeout}s)...</span>`;
 
     try {
       const res = await window.api.testSshConnection({
         host,
         port,
+        timeout,
         username,
         authType,
         password,
@@ -5298,6 +5424,8 @@ class TuxTerminalApp {
       return;
     }
 
+    profile.updatedAt = new Date().toISOString();
+
     const index = this.profiles.findIndex((p) => p.id === profile.id);
     if (index >= 0) {
       this.profiles[index] = profile;
@@ -5320,6 +5448,11 @@ class TuxTerminalApp {
 
     this.profiles = this.profiles.filter((p) => p.id !== id);
     await window.api.saveProfiles(this.profiles);
+
+    if (window.api.recordDeletedProfile) {
+      await window.api.recordDeletedProfile(id);
+    }
+
     this.renderSshProfilesList();
     this.clearSshForm();
     this.triggerAutoCloudSync('ssh');

@@ -852,6 +852,10 @@
                 <label for="ssh-port">Puerto</label>
                 <input type="number" id="ssh-port" value="22" min="1" max="65535">
               </div>
+              <div class="form-group flex-1">
+                <label for="ssh-timeout" title="Tiempo máximo de espera para conectar y autenticar (segundos)">Timeout (s)</label>
+                <input type="number" id="ssh-timeout" value="35" min="5" max="300" placeholder="35">
+              </div>
             </div>
 
             <div class="form-group">
