@@ -73,54 +73,48 @@ jobs:
           GYP_MSVS_VERSION: '2022'
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # Subir cada artefacto de forma individual para descargas limpias e independientes
-      - name: Upload Linux .deb (Instalador)
+      # Subir cada paquete por separado sin meterlo en un zip (igual que en directory-commander-tux-tux)
+      - name: Subir instalador Linux .deb
         if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: myterminal-tux-tux-linux-deb
           path: dist/*.deb
-          if-no-files-found: error
+          archive: false
 
-      - name: Upload Linux .AppImage (Portable)
+      - name: Subir portable Linux .AppImage
         if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: myterminal-tux-tux-linux-appimage
           path: dist/*.AppImage
-          if-no-files-found: error
+          archive: false
 
-      - name: Upload Windows Setup (Instalador .exe)
+      - name: Subir instalador Windows .exe
         if: matrix.platform == 'windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: myterminal-tux-tux-windows-installer
           path: dist/*Setup*.exe
-          if-no-files-found: error
+          archive: false
 
-      - name: Upload Windows Portable (.exe)
+      - name: Subir portable Windows .exe
         if: matrix.platform == 'windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: myterminal-tux-tux-windows-portable
           path: dist/*Portable*.exe
-          if-no-files-found: error
+          archive: false
 
-      - name: Upload macOS DMG (Instalador)
+      - name: Subir instalador macOS .dmg
         if: matrix.platform == 'macos'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: myterminal-tux-tux-macos-dmg
           path: dist/*.dmg
-          if-no-files-found: error
+          archive: false
 
-      - name: Upload macOS ZIP (Portable)
+      - name: Subir portable macOS .zip
         if: matrix.platform == 'macos'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: myterminal-tux-tux-macos-zip
           path: dist/*.zip
-          if-no-files-found: error
+          archive: false
 
   release:
     name: Publish GitHub Release
@@ -133,7 +127,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist-release
           merge-multiple: true
