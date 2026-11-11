@@ -80,8 +80,10 @@ function clearMasterPassword() {
 }
 
 function mergeProfiles(localProfiles = [], remoteProfiles = [], deletedProfileIds = []) {
-  if (!remoteProfiles || remoteProfiles.length === 0) return localProfiles;
   const deletedSet = new Set(deletedProfileIds || []);
+  if (!remoteProfiles || remoteProfiles.length === 0) {
+    return (localProfiles || []).filter((p) => p && p.id && !deletedSet.has(p.id));
+  }
   if (!localProfiles || localProfiles.length === 0) {
     return remoteProfiles.filter((p) => p && p.id && !deletedSet.has(p.id));
   }
@@ -129,6 +131,20 @@ function mergeProfiles(localProfiles = [], remoteProfiles = [], deletedProfileId
   }
 
   return result;
+}
+
+function getCombinedDeletedProfileIds(localCfg = {}, remoteData = {}) {
+  const localDeleted = (localCfg && localCfg.cloudSync && Array.isArray(localCfg.cloudSync.deletedProfileIds))
+    ? localCfg.cloudSync.deletedProfileIds
+    : [];
+  const remoteDeleted = (remoteData && Array.isArray(remoteData.deletedProfileIds))
+    ? remoteData.deletedProfileIds
+    : ((remoteData && remoteData.config && remoteData.config.cloudSync && Array.isArray(remoteData.config.cloudSync.deletedProfileIds))
+      ? remoteData.config.cloudSync.deletedProfileIds
+      : []);
+
+  const combined = Array.from(new Set([...localDeleted, ...remoteDeleted]));
+  return combined.slice(-200);
 }
 
 let pty;
@@ -688,6 +704,60 @@ function getTerminalSshStatus(id) {
   }
 }
 
+function terminateTerminalSsh(id) {
+  const item = ptys.get(id);
+  if (!item || !item.process || !item.process.pid) {
+    return false;
+  }
+
+  if (process.platform !== 'linux') {
+    return false;
+  }
+
+  const shellPid = item.process.pid;
+  try {
+    const descendants = [];
+    const queue = [shellPid];
+    while (queue.length > 0) {
+      const parent = queue.shift();
+      try {
+        const out = execSync(`pgrep -P ${parent}`, { encoding: 'utf-8', timeout: 300 }).trim();
+        if (out) {
+          const children = out.split(/\s+/).map(Number).filter(Boolean);
+          for (const c of children) {
+            descendants.push(c);
+            queue.push(c);
+          }
+        }
+      } catch (e) {}
+    }
+
+    let sshPid = null;
+    for (const p of descendants) {
+      try {
+        const comm = fs.readFileSync(`/proc/${p}/comm`, 'utf-8').trim();
+        if (comm.toLowerCase().includes('ssh')) {
+          sshPid = p;
+          break;
+        }
+      } catch (e) {}
+    }
+
+    if (sshPid) {
+      try {
+        process.kill(sshPid, 'SIGTERM');
+        setTimeout(() => {
+          try { process.kill(sshPid, 'SIGKILL'); } catch (e) {}
+        }, 300);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+  } catch (err) {}
+  return false;
+}
+
 function registerIpcHandlers() {
   // Config
   ipcMain.handle('config:get', () => {
@@ -928,18 +998,24 @@ function registerIpcHandlers() {
           try {
             const { content } = await gdriveService.downloadSyncFile();
             const remoteData = decryptSyncPayload(content, pass);
-            if (remoteData && Array.isArray(remoteData.profiles)) {
-              const deletedIds = config.cloudSync?.deletedProfileIds || [];
-              profiles = mergeProfiles(profiles, remoteData.profiles, deletedIds);
-              saveJsonFile('ssh-profiles.json', profiles);
-            }
-            if (remoteData && remoteData.sessions && typeof remoteData.sessions === 'object') {
-              sessions = { ...remoteData.sessions, ...sessions };
-              saveJsonFile('sessions.json', sessions);
-            }
-            if (remoteData && remoteData.tabTemplates && typeof remoteData.tabTemplates === 'object') {
-              tabTemplates = { ...remoteData.tabTemplates, ...tabTemplates };
-              saveJsonFile('tab-templates.json', tabTemplates);
+            if (remoteData && typeof remoteData === 'object') {
+              const combinedDeletedIds = getCombinedDeletedProfileIds(config, remoteData);
+              if (!config.cloudSync) config.cloudSync = {};
+              config.cloudSync.deletedProfileIds = combinedDeletedIds;
+              saveJsonFile('config.json', config);
+
+              if (Array.isArray(remoteData.profiles)) {
+                profiles = mergeProfiles(profiles, remoteData.profiles, combinedDeletedIds);
+                saveJsonFile('ssh-profiles.json', profiles);
+              }
+              if (remoteData.sessions && typeof remoteData.sessions === 'object') {
+                sessions = { ...remoteData.sessions, ...sessions };
+                saveJsonFile('sessions.json', sessions);
+              }
+              if (remoteData.tabTemplates && typeof remoteData.tabTemplates === 'object') {
+                tabTemplates = { ...remoteData.tabTemplates, ...tabTemplates };
+                saveJsonFile('tab-templates.json', tabTemplates);
+              }
             }
           } catch (mergeErr) {
             console.warn('No se pudo fusionar el archivo remoto antes de subir:', mergeErr.message);
@@ -949,6 +1025,7 @@ function registerIpcHandlers() {
         console.warn('No se pudo consultar el archivo remoto previo al upload:', checkErr.message);
       }
 
+      const combinedDeletedIds = config.cloudSync?.deletedProfileIds || [];
       const bundle = {
         app: 'myterminal-tux-tux',
         version: app.getVersion(),
@@ -956,7 +1033,8 @@ function registerIpcHandlers() {
         config,
         profiles,
         sessions,
-        tabTemplates
+        tabTemplates,
+        deletedProfileIds: combinedDeletedIds
       };
 
       const encrypted = encryptSyncPayload(bundle, pass);
@@ -1000,6 +1078,8 @@ function registerIpcHandlers() {
         return { success: false, error: 'El archivo descargado no contiene datos válidos.' };
       }
 
+      const combinedDeletedIds = getCombinedDeletedProfileIds(getUserConfig(), data);
+
       if (data.config && typeof data.config === 'object') {
         if (data.config.defaultShell) {
           const available = getAvailableShells();
@@ -1017,14 +1097,19 @@ function registerIpcHandlers() {
           }
         }
         if (!data.config.cloudSync) data.config.cloudSync = {};
+        data.config.cloudSync.deletedProfileIds = combinedDeletedIds;
         data.config.cloudSync.lastSync = remoteFile.modifiedTime || new Date().toISOString();
         saveJsonFile('config.json', data.config);
+      } else {
+        const cfg = getUserConfig();
+        if (!cfg.cloudSync) cfg.cloudSync = {};
+        cfg.cloudSync.deletedProfileIds = combinedDeletedIds;
+        saveJsonFile('config.json', cfg);
       }
 
       if (Array.isArray(data.profiles)) {
         const localProfiles = loadJsonFile('ssh-profiles.json', []);
-        const deletedIds = data.config?.cloudSync?.deletedProfileIds || getUserConfig().cloudSync?.deletedProfileIds || [];
-        const mergedProfiles = mergeProfiles(localProfiles, data.profiles, deletedIds);
+        const mergedProfiles = mergeProfiles(localProfiles, data.profiles, combinedDeletedIds);
         saveJsonFile('ssh-profiles.json', mergedProfiles);
         data.profiles = mergedProfiles;
       }
@@ -1087,9 +1172,14 @@ function registerIpcHandlers() {
         return { checked: true, updated: false, error: 'invalid_data' };
       }
 
+      const combinedDeletedIds = getCombinedDeletedProfileIds(cfg, data);
+      if (!cfg.cloudSync) cfg.cloudSync = {};
+      cfg.cloudSync.deletedProfileIds = combinedDeletedIds;
+      cfg.cloudSync.lastSync = remoteFile.modifiedTime;
+      saveJsonFile('config.json', cfg);
+
       const localProfiles = loadJsonFile('ssh-profiles.json', []);
-      const deletedIds = cfg.cloudSync?.deletedProfileIds || [];
-      const mergedProfiles = mergeProfiles(localProfiles, Array.isArray(data.profiles) ? data.profiles : [], deletedIds);
+      const mergedProfiles = mergeProfiles(localProfiles, Array.isArray(data.profiles) ? data.profiles : [], combinedDeletedIds);
       saveJsonFile('ssh-profiles.json', mergedProfiles);
 
       if (data.sessions && typeof data.sessions === 'object') {
@@ -1100,10 +1190,6 @@ function registerIpcHandlers() {
         const localTemplates = loadJsonFile('tab-templates.json', {});
         saveJsonFile('tab-templates.json', { ...data.tabTemplates, ...localTemplates });
       }
-
-      if (!cfg.cloudSync) cfg.cloudSync = {};
-      cfg.cloudSync.lastSync = remoteFile.modifiedTime;
-      saveJsonFile('config.json', cfg);
 
       return {
         checked: true,
@@ -1139,6 +1225,7 @@ function registerIpcHandlers() {
       let localTemplates = loadJsonFile('tab-templates.json', {});
 
       // 1. Comprobar si existe archivo en Google Drive y fusionar
+      let combinedDeletedIds = config.cloudSync?.deletedProfileIds || [];
       try {
         const remoteFile = await gdriveService.findRemoteSyncFile();
         if (remoteFile) {
@@ -1146,9 +1233,13 @@ function registerIpcHandlers() {
           const remoteData = decryptSyncPayload(content, pass);
 
           if (remoteData && typeof remoteData === 'object') {
+            combinedDeletedIds = getCombinedDeletedProfileIds(config, remoteData);
+            if (!config.cloudSync) config.cloudSync = {};
+            config.cloudSync.deletedProfileIds = combinedDeletedIds;
+            saveJsonFile('config.json', config);
+
             if (Array.isArray(remoteData.profiles)) {
-              const deletedIds = config.cloudSync?.deletedProfileIds || [];
-              localProfiles = mergeProfiles(localProfiles, remoteData.profiles, deletedIds);
+              localProfiles = mergeProfiles(localProfiles, remoteData.profiles, combinedDeletedIds);
               saveJsonFile('ssh-profiles.json', localProfiles);
             }
             if (remoteData.sessions && typeof remoteData.sessions === 'object') {
@@ -1173,7 +1264,8 @@ function registerIpcHandlers() {
         config,
         profiles: localProfiles,
         sessions: localSessions,
-        tabTemplates: localTemplates
+        tabTemplates: localTemplates,
+        deletedProfileIds: combinedDeletedIds
       };
 
       const encrypted = encryptSyncPayload(bundle, pass);
@@ -1363,6 +1455,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('terminal:get-ssh-status', (event, { id }) => {
     return getTerminalSshStatus(id);
+  });
+
+  ipcMain.handle('terminal:kill-ssh', (event, { id }) => {
+    return terminateTerminalSsh(id);
   });
 
   // Git

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   killTerminal: (id) => ipcRenderer.invoke('terminal:kill', { id }),
   getTerminalCwd: (id) => ipcRenderer.invoke('terminal:get-cwd', { id }),
   getTerminalSshStatus: (id) => ipcRenderer.invoke('terminal:get-ssh-status', { id }),
+  killTerminalSsh: (id) => ipcRenderer.invoke('terminal:kill-ssh', { id }),
 
   // Data listeners
   onTerminalData: (id, callback) => {

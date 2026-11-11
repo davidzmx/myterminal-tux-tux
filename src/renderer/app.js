@@ -210,12 +210,14 @@ class TuxTerminalApp {
     // Polling SSH status to automatically restore normal header if disconnected
     setInterval(async () => {
       for (const [termId, inst] of this.terminals.entries()) {
-        if (inst && inst.sshSession) {
+        if (inst && (inst.sshSession || inst.pendingSshSession)) {
           try {
             const status = await window.api.getTerminalSshStatus(termId);
-            if (!status || !status.connected) {
+            const isDead = !status || !status.hasSsh || (inst.sshSession && !status.connected);
+            if (isDead) {
               inst.sshSession = null;
               inst.pendingSshSession = null;
+              inst.sshState = 'none';
               inst.sshShowGit = false;
               inst.title = 'Terminal';
               this.updateToolbarSshStatus(termId);
@@ -224,7 +226,7 @@ class TuxTerminalApp {
           } catch (e) {}
         }
       }
-    }, 2500);
+    }, 2000);
 
     window.addEventListener('resize', () => {
       this.fitAllTerminals();
@@ -3617,7 +3619,7 @@ class TuxTerminalApp {
     this.updateStatusBar();
   }
 
-  disconnectSshSession(termId) {
+  async disconnectSshSession(termId) {
     const inst = this.terminals.get(termId);
     const wasPending = Boolean(inst && inst.pendingSshSession && !inst.sshSession);
     if (inst) {
@@ -3635,12 +3637,25 @@ class TuxTerminalApp {
       inst.sshShowGit = false;
       inst.title = 'Terminal';
     }
-    if (wasPending) {
-      window.api.writeTerminal(termId, '\x03'); // Ctrl+C para abortar el comando ssh
-    } else {
-      window.api.writeTerminal(termId, 'exit\r');
+
+    try {
+      let killed = false;
+      if (window.api && window.api.killTerminalSsh) {
+        killed = await window.api.killTerminalSsh(termId);
+      }
+      if (!killed) {
+        if (wasPending) {
+          window.api.writeTerminal(termId, '\x03');
+        } else {
+          window.api.writeTerminal(termId, 'exit\r');
+        }
+      }
+    } catch (e) {
+      window.api.writeTerminal(termId, wasPending ? '\x03' : 'exit\r');
     }
+
     this.updateToolbarSshStatus(termId);
+    this.updateStatusBar();
   }
 
   // ================= GIT INFORMATION & BRANCHES =================
@@ -4825,23 +4840,29 @@ class TuxTerminalApp {
     const ansiRegex = /[\u001b\u009b][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d\/#&.:=?%_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d\/#&.:=?%_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
     let buffer = '';
     let answered = false;
+    let cleanedUp = false;
 
     const timeoutId = setTimeout(() => {
       cleanup();
     }, 60000);
 
     const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
       clearTimeout(timeoutId);
-      if (inst.sshPwdListener) {
-        inst.sshPwdListener();
-        inst.sshPwdListener = null;
+      if (unsub) {
+        try { unsub(); } catch (e) {}
       }
+      inst.sshPwdListener = null;
     };
+
+    inst.sshPwdListener = cleanup;
 
     const unsub = window.api.onTerminalData(termId, (data) => {
       buffer += data;
+      inst._lastSshBuffer = buffer;
       const clean = buffer.replace(ansiRegex, '').replace(/[\r\x00]/g, '').trim();
-      const isPrompt = /(password|passphrase|contraseña|password for [^:]+|clave)[:\?]\s*$/im.test(clean);
+      const isPrompt = /(password|passphrase|contraseña|password for [^:]+|clave)[:\?]\s*$/i.test(clean);
 
       if (isPrompt) {
         if (inst.sshState !== 'authenticating') {
@@ -4851,6 +4872,7 @@ class TuxTerminalApp {
 
         if (secret && !answered) {
           answered = true;
+          inst._sshPasswordAnswered = true;
           setTimeout(() => {
             window.api.writeTerminal(termId, `${secret}\r`);
             setTimeout(() => {
@@ -4859,22 +4881,23 @@ class TuxTerminalApp {
             }, 150);
           }, 120);
         }
-      }
-
-      // Detectar si el inicio de sesión remoto ya se completó con éxito
-      const isRemoteWelcome = /(Last login:|Welcome to|Ubuntu |Debian |CentOS |Red Hat |Fedora |Linux .* GNU\/Linux)/i.test(clean);
-      const isRemotePrompt = /[\w.-]+@[\w.-]+[:\s].*[\$#%>]\s*$/m.test(clean);
-
-      if (isRemoteWelcome || (answered && isRemotePrompt)) {
-        cleanup();
-        if (onAuthenticated) onAuthenticated();
+      } else if (answered) {
+        // Ya respondimos con la contraseña guardada. Comprobar si fue rechazada o si ya cargó la sesión remota
+        const isAuthFailed = /(permission denied|authentication failed|access denied)/i.test(clean.slice(-150));
+        const isHostKeyPrompt = /Are you sure you want to continue connecting/i.test(clean.slice(-200));
+        if (!isAuthFailed && !isHostKeyPrompt) {
+          cleanup();
+          if (onAuthenticated) onAuthenticated();
+        }
+      } else if (!secret && inst.sshState === 'authenticating') {
+        // Para conexiones sin contraseña guardada donde el usuario ingresó la contraseña manualmente
+        const isAuthFailed = /(permission denied|authentication failed|access denied)/i.test(clean.slice(-150));
+        if (!isAuthFailed) {
+          cleanup();
+          if (onAuthenticated) onAuthenticated();
+        }
       }
     });
-
-    inst.sshPwdListener = () => {
-      unsub();
-      cleanup();
-    };
   }
 
   connectSshProfile(termId, profile) {
@@ -4916,6 +4939,8 @@ class TuxTerminalApp {
       inst.pendingSshSession = profile;
       inst.sshSession = null;
       inst.sshState = 'connecting';
+      inst._lastSshBuffer = '';
+      inst._sshPasswordAnswered = false;
       inst.sshShowGit = false;
     }
 
@@ -4955,6 +4980,8 @@ class TuxTerminalApp {
       let attempts = 0;
       const timeoutSec = Math.max(10, Math.min(300, parseInt(profile.timeout, 10) || 35));
       const maxAttempts = timeoutSec * 2; // chequeo cada 500ms
+      const ansiRegex = /[\u001b\u009b][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d\/#&.:=?%_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d\/#&.:=?%_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
+
       inst.sshPollTimer = setInterval(async () => {
         attempts++;
         if (!inst.pendingSshSession) {
@@ -4982,10 +5009,27 @@ class TuxTerminalApp {
             return;
           }
 
-          // Si es autenticación por llave sin contraseña y ya pasaron 4 ciclos (2s) con TCP establecido sin solicitud de contraseña
-          if (status && status.connected && !secretToSend && inst.sshState === 'connecting' && attempts >= 4) {
-            markConnected();
-            return;
+          // Verificación de conexión establecida universal (fail-safe independiente del sistema operativo o distribución)
+          if (status && status.connected) {
+            const cleanBuf = (inst._lastSshBuffer || '').replace(ansiRegex, '').replace(/[\r\x00]/g, '').trim();
+            const isStillAtPrompt = /(password|passphrase|contraseña|password for [^:]+|clave)[:\?]\s*$/i.test(cleanBuf);
+            const isHostKeyPrompt = /Are you sure you want to continue connecting/i.test(cleanBuf);
+            const isAuthFailed = /(permission denied|authentication failed|access denied)/i.test(cleanBuf.slice(-150));
+
+            // Si TCP está conectado, no está esperando contraseña ni llave de host, y no fue rechazada
+            if (!isStillAtPrompt && !isHostKeyPrompt && !isAuthFailed) {
+              if (secretToSend) {
+                if (inst._sshPasswordAnswered) {
+                  markConnected();
+                  return;
+                }
+              } else {
+                if (inst.sshState === 'authenticating' || attempts >= 4) {
+                  markConnected();
+                  return;
+                }
+              }
+            }
           }
         } catch (e) {}
 
@@ -5446,16 +5490,16 @@ class TuxTerminalApp {
     const profileName = profile?.name || document.getElementById('ssh-name')?.value.trim() || 'este perfil';
     if (!confirm(`¿Seguro que deseas eliminar el perfil SSH "${profileName}"? Esta acción no se puede deshacer.`)) return;
 
-    this.profiles = this.profiles.filter((p) => p.id !== id);
-    await window.api.saveProfiles(this.profiles);
-
     if (window.api.recordDeletedProfile) {
       await window.api.recordDeletedProfile(id);
     }
 
+    this.profiles = this.profiles.filter((p) => p.id !== id);
+    await window.api.saveProfiles(this.profiles);
+
     this.renderSshProfilesList();
     this.clearSshForm();
-    this.triggerAutoCloudSync('ssh');
+    await this.triggerAutoCloudSync('ssh');
     this.showCloudToast(`🗑️ Perfil "${profileName}" eliminado`);
   }
 
