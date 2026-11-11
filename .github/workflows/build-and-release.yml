@@ -73,17 +73,54 @@ jobs:
           GYP_MSVS_VERSION: '2022'
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Upload artifacts (${{ matrix.platform }})
+      # Subir cada artefacto de forma individual para descargas limpias e independientes
+      - name: Upload Linux .deb (Instalador)
+        if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
-          name: myterminal-tux-tux-${{ matrix.platform }}
-          path: |
-            dist/*.AppImage
-            dist/*.deb
-            dist/*.exe
-            dist/*.dmg
-            dist/*.zip
-          if-no-files-found: warn
+          name: myterminal-tux-tux-linux-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+      - name: Upload Linux .AppImage (Portable)
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: myterminal-tux-tux-linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+      - name: Upload Windows Setup (Instalador .exe)
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: myterminal-tux-tux-windows-installer
+          path: dist/*Setup*.exe
+          if-no-files-found: error
+
+      - name: Upload Windows Portable (.exe)
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: myterminal-tux-tux-windows-portable
+          path: dist/*Portable*.exe
+          if-no-files-found: error
+
+      - name: Upload macOS DMG (Instalador)
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: myterminal-tux-tux-macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Upload macOS ZIP (Portable)
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: myterminal-tux-tux-macos-zip
+          path: dist/*.zip
+          if-no-files-found: error
 
   release:
     name: Publish GitHub Release
