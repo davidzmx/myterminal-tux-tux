@@ -41,13 +41,15 @@ class GDriveService {
     const hasToken = fs.existsSync(this.tokenPath);
     let userEmail = null;
     let isAuthenticated = false;
+    let isExpired = false;
 
     if (hasToken) {
       try {
         const tokenData = JSON.parse(fs.readFileSync(this.tokenPath, 'utf8'));
         if (tokenData && (tokenData.access_token || tokenData.refresh_token)) {
           userEmail = tokenData.userEmail || null;
-          isAuthenticated = true;
+          isExpired = Boolean(tokenData.tokenExpired);
+          isAuthenticated = !isExpired;
         }
       } catch (err) {
         console.warn('Error leyendo gdrive-token.json:', err.message);
@@ -58,6 +60,7 @@ class GDriveService {
       hasClientConfig: !!clientInfo,
       clientInfo,
       isAuthenticated,
+      isExpired,
       userEmail,
       syncFileName: this.syncFileName
     };
@@ -398,6 +401,24 @@ class GDriveService {
 
     if (!response.ok) {
       const errText = await response.text();
+      let isInvalidGrant = false;
+      try {
+        const errJson = JSON.parse(errText);
+        if (errJson.error === 'invalid_grant' || (errJson.error_description && errJson.error_description.includes('expired or revoked'))) {
+          isInvalidGrant = true;
+        }
+      } catch (e) {
+        if (errText.includes('invalid_grant')) isInvalidGrant = true;
+      }
+
+      if (isInvalidGrant) {
+        try {
+          tokenData.tokenExpired = true;
+          this.saveTokenData(tokenData);
+        } catch (e) {}
+        throw new Error('Tu sesión de Google Drive ha caducado o fue revocada por Google (los proyectos en modo Prueba caducan a los 7 días). Ve a Ajustes > Google Drive, desconéctate y vuelve a iniciar sesión.');
+      }
+
       throw new Error(`Error al refrescar token de Google (${response.status}): ${errText}`);
     }
 

@@ -60,6 +60,10 @@
           </button>
         </div>
 
+        <button id="btn-quick-notes" class="top-btn" title="Notas rápidas (Ctrl+Shift+N)">
+          <span class="btn-icon">📄</span> Notas
+        </button>
+
         <button id="btn-ssh-manager" class="top-btn highlight" title="Administrar Perfiles SSH">
           <span class="btn-icon">🔑</span> Perfiles SSH
         </button>
@@ -328,6 +332,18 @@
             <div class="form-group">
               <label for="cfg-scrollback">Líneas de Historial (Scrollback)</label>
               <input type="number" id="cfg-scrollback" min="500" max="50000" step="500" value="5000">
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+              <label class="checkbox-label" style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+                <input type="checkbox" id="cfg-intercept-right-click" checked style="margin-top:3px; cursor:pointer;">
+                <div>
+                  <span style="font-weight:600; color:var(--text-main);">Interceptar clic derecho en la terminal</span>
+                  <small class="form-hint" style="margin-top:3px; display:block;">
+                    Abre únicamente el menú gráfico de Tux Tux (evita que tmux, vim o htop muestren menús de texto superpuestos). Puedes usar <code>Shift + Clic derecho</code> para enviar el clic a la aplicación de consola.
+                  </small>
+                </div>
+              </label>
             </div>
 
             <div class="form-actions">
@@ -1255,6 +1271,69 @@
             <button type="submit" id="btn-git-unstage-submit" class="btn btn-primary">Ejecutar Git Unstage</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Notes Floating Popup -->
+  <div id="quick-notes-popup" class="quick-notes-popup hidden">
+    <div class="qn-container">
+      <div class="qn-header-bar">
+        <div class="qn-search-wrap">
+          <span class="qn-search-icon">🔍</span>
+          <input type="text" id="qn-search-input" class="qn-search-input" placeholder="Buscar notas o comandos…" spellcheck="false" autocomplete="off" />
+          <button type="button" id="qn-search-clear" class="qn-search-clear hidden" title="Limpiar búsqueda">✕</button>
+        </div>
+        <div class="qn-top-actions">
+          <button type="button" id="qn-btn-new" class="qn-top-action-btn" title="Nueva nota (Ctrl+N)">
+            <span class="qn-btn-icon">📄</span> <span>Nueva</span>
+          </button>
+          <button type="button" id="qn-btn-paste" class="qn-top-action-btn" title="Crear nota desde el portapapeles">
+            <span class="qn-btn-icon">📋</span> <span>Pegar</span>
+          </button>
+          <button type="button" id="qn-btn-import" class="qn-top-action-btn qn-icon-only" title="Importar notas (JSON)">
+            <span>📥</span>
+          </button>
+          <button type="button" id="qn-btn-export" class="qn-top-action-btn qn-icon-only" title="Exportar notas (JSON)">
+            <span>📤</span>
+          </button>
+          <button type="button" id="qn-btn-close" class="qn-top-action-btn qn-icon-only" title="Cerrar (Esc)">
+            <span>✕</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="qn-content-split">
+        <!-- Sidebar: Notes list -->
+        <div class="qn-sidebar">
+          <div id="qn-notes-list" class="qn-notes-list"></div>
+          <div id="qn-empty-list" class="qn-empty-list hidden">No hay notas</div>
+        </div>
+
+        <!-- Editor: Active note -->
+        <div class="qn-editor-pane">
+          <div class="qn-editor-toolbar">
+            <input type="text" id="qn-title-input" class="qn-title-input" placeholder="Título de la nota" spellcheck="false" />
+            <div class="qn-editor-actions">
+              <span id="qn-feedback-badge" class="qn-feedback-badge hidden">¡Copiado!</span>
+              <button type="button" id="qn-btn-copy" class="qn-editor-btn" title="Copiar contenido al portapapeles (Enter)">
+                <span>📋</span> <span>Copiar</span>
+              </button>
+              <button type="button" id="qn-btn-delete" class="qn-editor-btn qn-btn-delete" title="Eliminar nota actual">
+                <span>🗑️</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="qn-textarea-wrap">
+            <textarea id="qn-content-textarea" class="qn-content-textarea" placeholder="# Escribe aquí tus notas, comandos o rutas..." spellcheck="false"></textarea>
+          </div>
+          
+          <div class="qn-editor-statusbar">
+            <span class="qn-footer-hint">💡 Doble clic en la lista para copiar al instante</span>
+            <span id="qn-char-count" class="qn-char-count">0 car.</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>

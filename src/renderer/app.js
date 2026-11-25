@@ -76,6 +76,7 @@ class TuxTerminalApp {
     this.cfgFontSizeInput = document.getElementById('cfg-font-size');
     this.cfgFontFamilyInput = document.getElementById('cfg-font-family');
     this.cfgScrollbackInput = document.getElementById('cfg-scrollback');
+    this.cfgInterceptRightClick = document.getElementById('cfg-intercept-right-click');
     this.generalConfigForm = document.getElementById('general-config-form');
     this.gitActionsListEl = document.getElementById('git-actions-list');
 
@@ -123,6 +124,32 @@ class TuxTerminalApp {
     // State for SSH Search & Cloud Syncing
     this.sshSearchQuery = '';
     this.isSyncing = false;
+
+    // Quick Notes state & elements
+    this.notes = [];
+    this.currentNoteId = null;
+    this.notesSaveTimer = null;
+    this.notesFeedbackTimer = null;
+    this.btnQuickNotes = document.getElementById('btn-quick-notes');
+    this.quickNotesPopup = document.getElementById('quick-notes-popup');
+    this.qnSearchInput = document.getElementById('qn-search-input');
+    this.qnSearchClear = document.getElementById('qn-search-clear');
+    this.qnBtnNew = document.getElementById('qn-btn-new');
+    this.qnBtnPaste = document.getElementById('qn-btn-paste');
+    this.qnBtnImport = document.getElementById('qn-btn-import');
+    this.qnBtnExport = document.getElementById('qn-btn-export');
+    this.qnBtnClose = document.getElementById('qn-btn-close');
+    this.qnNotesList = document.getElementById('qn-notes-list');
+    this.qnEmptyList = document.getElementById('qn-empty-list');
+    this.qnTitleInput = document.getElementById('qn-title-input');
+    this.qnFeedbackBadge = document.getElementById('qn-feedback-badge');
+    this.qnBtnCopy = document.getElementById('qn-btn-copy');
+    this.qnBtnDelete = document.getElementById('qn-btn-delete');
+    this.qnContentTextarea = document.getElementById('qn-content-textarea');
+    this.qnCharCount = document.getElementById('qn-char-count');
+    this.qnLoadingNote = false;
+    this.qnSelectionCopyTimer = null;
+    this.qnPendingSelection = '';
   }
 
   async loadInitialData() {
@@ -175,6 +202,22 @@ class TuxTerminalApp {
     } catch (e) {
       console.error('Error loading SSH profiles:', e);
       this.profiles = [];
+    }
+
+    try {
+      this.notes = await window.api.getNotes();
+      if (!Array.isArray(this.notes) || this.notes.length === 0) {
+        this.notes = [{
+          id: 'note-welcome',
+          title: 'Bienvenido',
+          content: '# Comandos y notas rápidas\n# Escribe aquí rutas, comandos o datos temporales.\n# Haz doble clic en la lista para copiar al instante.',
+          updatedAt: new Date().toISOString()
+        }];
+        await window.api.saveNotes(this.notes);
+      }
+    } catch (e) {
+      console.error('Error loading notes:', e);
+      this.notes = [];
     }
 
     // Create first default tab
@@ -328,6 +371,15 @@ class TuxTerminalApp {
     document.getElementById('btn-tab-layouts').addEventListener('click', () => {
       this.openTabLayoutModal();
     });
+
+    if (this.btnQuickNotes) {
+      this.btnQuickNotes.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleQuickNotesPopup();
+      });
+    }
+
+    this.initQuickNotes();
 
     const btnAbout = document.getElementById('btn-about');
     if (btnAbout) {
@@ -985,10 +1037,18 @@ class TuxTerminalApp {
         } else if (e.key === 'C' || e.key === 'c') {
           e.preventDefault();
           if (this.activeTerminalId) this.copyTerminalSelection(this.activeTerminalId);
+        } else if (e.key === 'N' || e.key === 'n') {
+          e.preventDefault();
+          this.toggleQuickNotesPopup();
         }
       }
 
       if (e.key === 'Escape') {
+        if (this.isQuickNotesOpen()) {
+          e.preventDefault();
+          this.closeQuickNotesPopup();
+          return;
+        }
         const openModals = Array.from(document.querySelectorAll('.modal:not(.hidden)'));
         if (openModals.length > 0) {
           e.preventDefault();
@@ -1306,6 +1366,9 @@ class TuxTerminalApp {
     this.cfgFontSizeInput.value = this.config.fontSize || 13;
     this.cfgFontFamilyInput.value = this.config.fontFamily || "Consolas, 'Fira Code', monospace";
     this.cfgScrollbackInput.value = this.config.scrollback || 5000;
+    if (this.cfgInterceptRightClick) {
+      this.cfgInterceptRightClick.checked = this.config.interceptRightClick !== false;
+    }
 
     const sshColor = this.config.sshHeaderColor || '#b91c1c';
     const colorInput = document.getElementById('cfg-ssh-color');
@@ -1557,12 +1620,24 @@ class TuxTerminalApp {
               this.profiles = res.data.profiles;
               this.renderSshProfilesList();
             }
+            if (Array.isArray(res.data.notes)) {
+              this.notes = res.data.notes;
+              if (this.isQuickNotesOpen()) {
+                this.renderNotesList(this.qnSearchInput ? this.qnSearchInput.value.trim() : '');
+                if (this.currentNoteId) this.selectNote(this.currentNoteId, false);
+              }
+            }
           } else {
             this.config = await window.api.getConfig();
             this.profiles = await window.api.getProfiles();
+            this.notes = await window.api.getNotes();
             this.renderSshProfilesList();
             this.applyTheme(this.config?.theme || 'dark');
             this.applySshHeaderColor();
+            if (this.isQuickNotesOpen()) {
+              this.renderNotesList(this.qnSearchInput ? this.qnSearchInput.value.trim() : '');
+              if (this.currentNoteId) this.selectNote(this.currentNoteId, false);
+            }
           }
 
           this.populateConfigGroupSelect();
@@ -1691,6 +1766,7 @@ class TuxTerminalApp {
           const shortUser = status.userEmail ? status.userEmail.split('@')[0] : 'Drive';
           if (!this.isSyncing && cloudStatusText) cloudStatusText.textContent = `Drive: ${shortUser}`;
           btnCloudStatus.title = `Google Drive: Conectado (${status.userEmail}). Clic para ver opciones.`;
+          btnCloudStatus.classList.remove('token-expired');
         }
 
         // Update Footer Status Bar
@@ -1700,6 +1776,25 @@ class TuxTerminalApp {
             statusCloudText.textContent = `☁️ Drive: ${status.userEmail || 'Conectado'}`;
           }
           statusCloudIndicator.title = `Google Drive: Conectado (${status.userEmail}). Clic para sincronizar ahora.`;
+        }
+      } else if (status.isExpired) {
+        notLoggedBox?.classList.remove('hidden');
+        loggedBox?.classList.add('hidden');
+
+        // Mostrar advertencia en el botón superior en vez de ocultarlo o dejarlo en verde
+        if (cloudStatusGroup) cloudStatusGroup.classList.remove('hidden');
+        if (btnCloudStatus) {
+          if (!this.isSyncing && cloudStatusText) cloudStatusText.textContent = `⚠️ Drive: Reconectar`;
+          btnCloudStatus.title = `La sesión de Google Drive expiró o fue revocada. Haz clic para reconectar tu cuenta.`;
+          btnCloudStatus.classList.add('token-expired');
+        }
+
+        if (statusCloudIndicator) {
+          statusCloudIndicator.classList.remove('hidden');
+          if (!this.isSyncing && statusCloudText) {
+            statusCloudText.textContent = `⚠️ Drive: Sesión caducada`;
+          }
+          statusCloudIndicator.title = `La sesión de Google Drive expiró o fue revocada. Haz clic para reconectar tu cuenta.`;
         }
       } else {
         notLoggedBox?.classList.remove('hidden');
@@ -1892,14 +1987,23 @@ class TuxTerminalApp {
     try {
       if (!window.api || !window.api.gdrive || !window.api.gdrive.autoPull) return;
       const res = await window.api.gdrive.autoPull();
-      if (res && res.updated && Array.isArray(res.profiles)) {
+      if (res && res.updated) {
         this.setSyncingState(true);
-        this.profiles = res.profiles;
-        this.renderSshProfilesList();
+        if (Array.isArray(res.profiles)) {
+          this.profiles = res.profiles;
+          this.renderSshProfilesList();
+        }
+        if (Array.isArray(res.notes)) {
+          this.notes = res.notes;
+          if (this.isQuickNotesOpen()) {
+            this.renderNotesList(this.qnSearchInput ? this.qnSearchInput.value.trim() : '');
+            if (this.currentNoteId) this.selectNote(this.currentNoteId, false);
+          }
+        }
         this.updateStatusBar();
         this.setSyncingState(false, true);
         if (!silent) {
-          this.showCloudToast('☁️ Perfiles SSH sincronizados desde Google Drive');
+          this.showCloudToast('☁️ Datos sincronizados desde Google Drive');
         }
         await this.refreshGDriveUI();
       }
@@ -1934,6 +2038,9 @@ class TuxTerminalApp {
     this.config.fontSize = parseInt(this.cfgFontSizeInput.value, 10) || 13;
     this.config.fontFamily = this.cfgFontFamilyInput.value.trim() || "Consolas, 'Fira Code', monospace";
     this.config.scrollback = parseInt(this.cfgScrollbackInput.value, 10) || 5000;
+    if (this.cfgInterceptRightClick) {
+      this.config.interceptRightClick = this.cfgInterceptRightClick.checked;
+    }
 
     const colorInput = document.getElementById('cfg-ssh-color');
     if (colorInput) {
@@ -4455,6 +4562,10 @@ class TuxTerminalApp {
           this.pasteToTerminal(node.id);
           return false;
         }
+        if (event.ctrlKey && event.shiftKey && (event.key === 'N' || event.key === 'n')) {
+          this.toggleQuickNotesPopup();
+          return false;
+        }
       }
       return true;
     });
@@ -4473,6 +4584,27 @@ class TuxTerminalApp {
         this.pasteToTerminal(node.id);
       }
     });
+
+    // Interceptar clics de botón derecho en capture-phase si la configuración lo indica.
+    // Esto evita que xterm.js capture el clic y le envíe secuencias de escape a aplicaciones
+    // con soporte de ratón activo (como tmux, vim o htop), impidiendo menús de texto superpuestos.
+    bodyEl.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        const intercept = this.config?.interceptRightClick !== false;
+        if (intercept && !e.shiftKey) {
+          e.stopImmediatePropagation();
+        }
+      }
+    }, true);
+
+    bodyEl.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        const intercept = this.config?.interceptRightClick !== false;
+        if (intercept && !e.shiftKey) {
+          e.stopImmediatePropagation();
+        }
+      }
+    }, true);
 
     const cols = term.cols || 80;
     const rows = term.rows || 24;
@@ -4567,6 +4699,9 @@ class TuxTerminalApp {
   }
 
   focusTerminal(inst) {
+    if (this.isQuickNotesOpen && this.isQuickNotesOpen()) {
+      this.closeQuickNotesPopup();
+    }
     if (!inst || !inst.term) return;
     const term = inst.term;
     const doFocus = () => {
@@ -4586,6 +4721,9 @@ class TuxTerminalApp {
   }
 
   setActiveTerminal(termId) {
+    if (this.isQuickNotesOpen && this.isQuickNotesOpen()) {
+      this.closeQuickNotesPopup();
+    }
     this.activeTerminalId = termId;
 
     document.querySelectorAll('.terminal-pane').forEach((p) => {
@@ -4802,7 +4940,11 @@ class TuxTerminalApp {
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        window.api.writeTerminal(targetId, text);
+        if (inst && inst.term && typeof inst.term.paste === 'function') {
+          inst.term.paste(text);
+        } else {
+          window.api.writeTerminal(targetId, text);
+        }
       }
     } catch (err) {
       console.error('Clipboard paste failed:', err);
@@ -5789,6 +5931,554 @@ class TuxTerminalApp {
     const leaves = this.getLeafTerminals(tab.tree);
     if (leaves.length > 0) {
       this.setActiveTerminal(leaves[0].id);
+    }
+  }
+
+  // ================= QUICK NOTES (NOTAS RÁPIDAS) =================
+  initQuickNotes() {
+    if (!this.quickNotesPopup) return;
+
+    // Prevent clicks inside popup from propagating to document
+    ['click', 'mousedown', 'pointerdown'].forEach((evt) => {
+      this.quickNotesPopup.addEventListener(evt, (e) => {
+        e.stopPropagation();
+      });
+    });
+
+    // Close when clicking outside (using capture phase on pointerdown/mousedown/click so terminal clicks are always caught)
+    const handleOutsideClick = (e) => {
+      if (this.isQuickNotesOpen()) {
+        const isBtn = this.btnQuickNotes && (this.btnQuickNotes === e.target || this.btnQuickNotes.contains(e.target));
+        if (!isBtn && !this.quickNotesPopup.contains(e.target)) {
+          this.closeQuickNotesPopup();
+        }
+      }
+    };
+
+    document.addEventListener('pointerdown', handleOutsideClick, true);
+    document.addEventListener('mousedown', handleOutsideClick, true);
+    document.addEventListener('click', handleOutsideClick, true);
+
+    if (this.qnBtnClose) {
+      this.qnBtnClose.addEventListener('click', () => {
+        this.closeQuickNotesPopup();
+      });
+    }
+
+    if (this.qnBtnNew) {
+      this.qnBtnNew.addEventListener('click', () => {
+        this.createNewNote();
+      });
+    }
+
+    if (this.qnBtnPaste) {
+      this.qnBtnPaste.addEventListener('click', () => {
+        this.pasteNewNote();
+      });
+    }
+
+    if (this.qnBtnCopy) {
+      this.qnBtnCopy.addEventListener('click', () => {
+        this.copyCurrentNote();
+      });
+    }
+
+    if (this.qnBtnDelete) {
+      this.qnBtnDelete.addEventListener('click', () => {
+        this.deleteCurrentNote();
+      });
+    }
+
+    if (this.qnBtnExport) {
+      this.qnBtnExport.addEventListener('click', () => {
+        this.exportNotes();
+      });
+    }
+
+    if (this.qnBtnImport) {
+      this.qnBtnImport.addEventListener('click', () => {
+        this.importNotes();
+      });
+    }
+
+    if (this.qnSearchInput) {
+      this.qnSearchInput.addEventListener('input', () => {
+        const query = this.qnSearchInput.value.trim();
+        if (this.qnSearchClear) {
+          this.qnSearchClear.classList.toggle('hidden', !query);
+        }
+        this.renderNotesList(query);
+      });
+      this.qnSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          if (this.qnSearchInput.value) {
+            this.qnSearchInput.value = '';
+            if (this.qnSearchClear) this.qnSearchClear.classList.add('hidden');
+            this.renderNotesList();
+          } else {
+            this.closeQuickNotesPopup();
+          }
+        }
+      });
+    }
+
+    if (this.qnSearchClear) {
+      this.qnSearchClear.addEventListener('click', () => {
+        if (this.qnSearchInput) {
+          this.qnSearchInput.value = '';
+          this.qnSearchInput.focus();
+        }
+        this.qnSearchClear.classList.add('hidden');
+        this.renderNotesList();
+      });
+    }
+
+    if (this.qnTitleInput) {
+      this.qnTitleInput.addEventListener('input', () => {
+        this.onNoteContentOrTitleChanged();
+      });
+      this.qnTitleInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this.qnContentTextarea) {
+            this.qnContentTextarea.focus();
+          }
+        }
+      });
+    }
+
+    if (this.qnContentTextarea) {
+      this.qnContentTextarea.addEventListener('input', () => {
+        this.onNoteContentOrTitleChanged();
+      });
+      this.qnContentTextarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = this.qnContentTextarea.selectionStart;
+          const end = this.qnContentTextarea.selectionEnd;
+          const val = this.qnContentTextarea.value;
+          this.qnContentTextarea.value = val.substring(0, start) + '  ' + val.substring(end);
+          this.qnContentTextarea.selectionStart = this.qnContentTextarea.selectionEnd = start + 2;
+          this.onNoteContentOrTitleChanged();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          this.copyCurrentNote();
+        }
+      });
+    }
+
+    // Auto-copiado al seleccionar texto (idéntico a Directory Commander Tux Tux)
+    const setupAutoCopy = (el) => {
+      if (!el) return;
+      el.addEventListener('select', () => this.handleSelectionCopy(el));
+      el.addEventListener('mouseup', () => this.handleSelectionCopy(el));
+      el.addEventListener('keyup', (e) => {
+        if (e.shiftKey) this.handleSelectionCopy(el);
+      });
+    };
+
+    setupAutoCopy(this.qnContentTextarea);
+    setupAutoCopy(this.qnTitleInput);
+  }
+
+  isQuickNotesOpen() {
+    return this.quickNotesPopup && !this.quickNotesPopup.classList.contains('hidden');
+  }
+
+  openQuickNotesPopup() {
+    if (!this.quickNotesPopup) return;
+    this.quickNotesPopup.classList.remove('hidden');
+
+    if (!Array.isArray(this.notes) || this.notes.length === 0) {
+      this.notes = [{
+        id: 'note-welcome',
+        title: 'Bienvenido',
+        content: '# Comandos y notas rápidas\n# Escribe aquí rutas, comandos o datos temporales.\n# Haz doble clic en la lista para copiar al instante.',
+        updatedAt: new Date().toISOString()
+      }];
+      window.api.saveNotes(this.notes);
+    }
+
+    if (!this.currentNoteId || !this.notes.some(n => n.id === this.currentNoteId)) {
+      this.currentNoteId = this.notes[0]?.id || null;
+    }
+
+    const searchQuery = this.qnSearchInput ? this.qnSearchInput.value.trim() : '';
+    this.renderNotesList(searchQuery);
+
+    if (this.currentNoteId) {
+      this.selectNote(this.currentNoteId, false);
+    }
+
+    setTimeout(() => {
+      if (this.qnContentTextarea) {
+        this.qnContentTextarea.focus();
+      }
+    }, 50);
+  }
+
+  closeQuickNotesPopup() {
+    if (!this.quickNotesPopup) return;
+    this.saveCurrentNoteImmediate();
+    this.quickNotesPopup.classList.add('hidden');
+  }
+
+  toggleQuickNotesPopup() {
+    if (this.isQuickNotesOpen()) {
+      this.closeQuickNotesPopup();
+    } else {
+      this.openQuickNotesPopup();
+    }
+  }
+
+  showNotesFeedback(text = '¡Copiado!') {
+    if (!this.qnFeedbackBadge) return;
+    this.qnFeedbackBadge.textContent = text;
+    this.qnFeedbackBadge.classList.remove('hidden');
+    if (this.notesFeedbackTimer) clearTimeout(this.notesFeedbackTimer);
+    this.notesFeedbackTimer = setTimeout(() => {
+      if (this.qnFeedbackBadge) {
+        this.qnFeedbackBadge.classList.add('hidden');
+      }
+    }, 1500);
+  }
+
+  deriveNoteTitle(content, fallback = 'Nueva nota') {
+    if (!content) return fallback;
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length > 0) {
+      const first = lines[0];
+      return first.length > 40 ? first.substring(0, 40) + '…' : first;
+    }
+    return fallback;
+  }
+
+  renderNotesList(filterQuery = '') {
+    if (!this.qnNotesList) return;
+    this.qnNotesList.innerHTML = '';
+
+    const query = (filterQuery || '').toLowerCase();
+    const filtered = this.notes.filter(note => {
+      if (!query) return true;
+      const t = (note.title || '').toLowerCase();
+      const c = (note.content || '').toLowerCase();
+      return t.includes(query) || c.includes(query);
+    });
+
+    if (this.qnEmptyList) {
+      this.qnEmptyList.classList.toggle('hidden', filtered.length > 0);
+    }
+
+    filtered.forEach(note => {
+      const item = document.createElement('div');
+      item.className = 'qn-note-item' + (note.id === this.currentNoteId ? ' active' : '');
+      item.dataset.noteId = note.id;
+      item.title = note.title || 'Sin título';
+
+      // Title highlighting if searching
+      const displayTitle = note.title || 'Sin título';
+      if (query && displayTitle.toLowerCase().includes(query)) {
+        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        item.innerHTML = displayTitle.replace(regex, '<span class="qn-note-highlight">$1</span>');
+      } else {
+        item.textContent = displayTitle;
+      }
+
+      // Single click selects note
+      item.addEventListener('click', () => {
+        this.selectNote(note.id);
+      });
+
+      // Double click immediately copies note content to clipboard
+      item.addEventListener('dblclick', async (e) => {
+        e.preventDefault();
+        try {
+          await navigator.clipboard.writeText(note.content || '');
+          this.showNotesFeedback('¡Copiado!');
+          this.showToast(`Nota "${note.title}" copiada al portapapeles`, 'info');
+        } catch (err) {
+          console.error('Error copying note:', err);
+        }
+      });
+
+      this.qnNotesList.appendChild(item);
+    });
+  }
+
+  selectNote(noteId, savePending = true) {
+    if (savePending) {
+      this.saveCurrentNoteImmediate();
+    }
+
+    this.currentNoteId = noteId;
+    const note = this.notes.find(n => n.id === noteId);
+
+    this.qnLoadingNote = true;
+    try {
+      if (note) {
+        if (this.qnTitleInput) {
+          this.qnTitleInput.value = note.title || '';
+          this.qnTitleInput.disabled = false;
+        }
+        if (this.qnContentTextarea) {
+          this.qnContentTextarea.value = note.content || '';
+          this.qnContentTextarea.disabled = false;
+        }
+        if (this.qnBtnCopy) this.qnBtnCopy.disabled = false;
+        if (this.qnBtnDelete) this.qnBtnDelete.disabled = false;
+        this.updateCharCount(note.content || '');
+      } else {
+        if (this.qnTitleInput) {
+          this.qnTitleInput.value = '';
+          this.qnTitleInput.disabled = true;
+        }
+        if (this.qnContentTextarea) {
+          this.qnContentTextarea.value = '';
+          this.qnContentTextarea.disabled = true;
+        }
+        if (this.qnBtnCopy) this.qnBtnCopy.disabled = true;
+        if (this.qnBtnDelete) this.qnBtnDelete.disabled = true;
+        this.updateCharCount('');
+      }
+    } finally {
+      setTimeout(() => {
+        this.qnLoadingNote = false;
+      }, 50);
+    }
+
+    // Update active class in list
+    if (this.qnNotesList) {
+      Array.from(this.qnNotesList.children).forEach(el => {
+        el.classList.toggle('active', el.dataset.noteId === noteId);
+      });
+    }
+  }
+
+  handleSelectionCopy(el) {
+    if (this.qnLoadingNote || !el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    if (start !== undefined && end !== undefined && end > start) {
+      const selectedText = el.value.substring(start, end);
+      if (selectedText && selectedText.trim()) {
+        this.qnPendingSelection = selectedText;
+        if (this.qnSelectionCopyTimer) {
+          clearTimeout(this.qnSelectionCopyTimer);
+        }
+        this.qnSelectionCopyTimer = setTimeout(() => {
+          this.copyPendingSelection();
+        }, 120);
+      }
+    }
+  }
+
+  async copyPendingSelection() {
+    if (this.qnPendingSelection) {
+      const textToCopy = this.qnPendingSelection;
+      this.qnPendingSelection = '';
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+        this.showNotesFeedback('¡Copiado!');
+      } catch (err) {
+        console.error('Error auto-copying selected note text:', err);
+      }
+    }
+  }
+
+  updateCharCount(text) {
+    if (!this.qnCharCount) return;
+    const len = (text || '').length;
+    this.qnCharCount.textContent = `${len} car.`;
+  }
+
+  onNoteContentOrTitleChanged() {
+    const content = this.qnContentTextarea ? this.qnContentTextarea.value : '';
+    this.updateCharCount(content);
+
+    if (this.notesSaveTimer) {
+      clearTimeout(this.notesSaveTimer);
+    }
+    this.notesSaveTimer = setTimeout(() => {
+      this.saveCurrentNoteImmediate();
+    }, 300);
+  }
+
+  saveCurrentNoteImmediate() {
+    if (!this.currentNoteId) return;
+    if (this.notesSaveTimer) {
+      clearTimeout(this.notesSaveTimer);
+      this.notesSaveTimer = null;
+    }
+
+    const note = this.notes.find(n => n.id === this.currentNoteId);
+    if (!note) return;
+
+    let title = this.qnTitleInput ? this.qnTitleInput.value.trim() : '';
+    const content = this.qnContentTextarea ? this.qnContentTextarea.value : '';
+
+    if (!title) {
+      title = this.deriveNoteTitle(content);
+      if (this.qnTitleInput && document.activeElement !== this.qnTitleInput) {
+        this.qnTitleInput.value = title;
+      }
+    }
+
+    note.title = title;
+    note.content = content;
+    note.updatedAt = new Date().toISOString();
+
+    // Update list item display text
+    if (this.qnNotesList) {
+      const item = this.qnNotesList.querySelector(`[data-note-id="${note.id}"]`);
+      if (item) {
+        const query = this.qnSearchInput ? this.qnSearchInput.value.trim().toLowerCase() : '';
+        if (query && title.toLowerCase().includes(query)) {
+          const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+          item.innerHTML = title.replace(regex, '<span class="qn-note-highlight">$1</span>');
+        } else {
+          item.textContent = title;
+        }
+        item.title = title;
+      }
+    }
+
+    window.api.saveNotes(this.notes).catch(err => {
+      console.error('Error saving notes:', err);
+    });
+  }
+
+  async createNewNote() {
+    this.saveCurrentNoteImmediate();
+
+    const newNote = {
+      id: 'note-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6),
+      title: 'Nueva nota',
+      content: '',
+      updatedAt: new Date().toISOString()
+    };
+
+    this.notes.unshift(newNote);
+    await window.api.saveNotes(this.notes);
+
+    const query = this.qnSearchInput ? this.qnSearchInput.value.trim() : '';
+    this.renderNotesList(query);
+    this.selectNote(newNote.id, false);
+
+    if (this.qnTitleInput) {
+      this.qnLoadingNote = true;
+      this.qnTitleInput.focus();
+      this.qnTitleInput.select();
+      setTimeout(() => {
+        this.qnLoadingNote = false;
+      }, 150);
+    }
+  }
+
+  async pasteNewNote() {
+    this.saveCurrentNoteImmediate();
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        this.showToast('Portapapeles sin texto', 'warning');
+        return;
+      }
+
+      const title = this.deriveNoteTitle(text, 'Nota pegada');
+      const newNote = {
+        id: 'note-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6),
+        title: title,
+        content: text,
+        updatedAt: new Date().toISOString()
+      };
+
+      this.notes.unshift(newNote);
+      await window.api.saveNotes(this.notes);
+
+      const query = this.qnSearchInput ? this.qnSearchInput.value.trim() : '';
+      this.renderNotesList(query);
+      this.selectNote(newNote.id, false);
+      this.showNotesFeedback('¡Pegado!');
+      this.showToast('Nota creada desde portapapeles', 'success');
+    } catch (err) {
+      console.error('Error pasting note from clipboard:', err);
+      this.showToast('No se pudo leer el portapapeles', 'error');
+    }
+  }
+
+  async copyCurrentNote() {
+    const content = this.qnContentTextarea ? this.qnContentTextarea.value : '';
+    if (!content) {
+      this.showNotesFeedback('¡Vacío!');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(content);
+      this.showNotesFeedback('¡Copiado!');
+      this.showToast('Contenido copiado al portapapeles', 'info');
+    } catch (err) {
+      console.error('Error copying current note:', err);
+    }
+  }
+
+  async deleteCurrentNote() {
+    if (!this.currentNoteId) return;
+    const note = this.notes.find(n => n.id === this.currentNoteId);
+    if (!note) return;
+
+    const ok = confirm(`¿Eliminar la nota "${note.title}"?`);
+    if (!ok) return;
+
+    const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
+    this.notes = this.notes.filter(n => n.id !== this.currentNoteId);
+    await window.api.saveNotes(this.notes);
+
+    const nextNote = this.notes[idx] || this.notes[idx - 1] || null;
+    const query = this.qnSearchInput ? this.qnSearchInput.value.trim() : '';
+    this.renderNotesList(query);
+
+    if (nextNote) {
+      this.selectNote(nextNote.id, false);
+    } else {
+      this.selectNote(null, false);
+    }
+    this.showToast('Nota eliminada', 'info');
+  }
+
+  async exportNotes() {
+    this.saveCurrentNoteImmediate();
+    try {
+      const res = await window.api.exportNotes();
+      if (res && res.success) {
+        this.showNotesFeedback('¡Exportadas!');
+        this.showToast('Notas exportadas correctamente', 'success');
+      } else if (res && !res.canceled && res.error) {
+        this.showToast('Error al exportar notas: ' + res.error, 'error');
+      }
+    } catch (err) {
+      console.error('Error exporting notes:', err);
+      this.showToast('Error al exportar notas', 'error');
+    }
+  }
+
+  async importNotes() {
+    try {
+      const res = await window.api.importNotes();
+      if (res && res.success) {
+        this.notes = await window.api.getNotes();
+        const query = this.qnSearchInput ? this.qnSearchInput.value.trim() : '';
+        this.renderNotesList(query);
+        if (this.notes.length > 0) {
+          this.selectNote(this.notes[0].id, false);
+        }
+        this.showNotesFeedback('¡Importadas!');
+        this.showToast(`Se importaron ${res.count} notas`, 'success');
+      } else if (res && !res.canceled && res.error) {
+        this.showToast('Error al importar notas: ' + res.error, 'error');
+      }
+    } catch (err) {
+      console.error('Error importing notes:', err);
+      this.showToast('Error al importar notas', 'error');
     }
   }
 

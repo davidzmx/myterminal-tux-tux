@@ -147,6 +147,29 @@ function getCombinedDeletedProfileIds(localCfg = {}, remoteData = {}) {
   return combined.slice(-200);
 }
 
+function mergeNotes(localNotes = [], remoteNotes = []) {
+  if (!Array.isArray(remoteNotes) || remoteNotes.length === 0) return localNotes || [];
+  if (!Array.isArray(localNotes) || localNotes.length === 0) return remoteNotes || [];
+
+  const localMap = new Map((localNotes || []).map((n) => [n.id, n]));
+  const result = [...localNotes];
+
+  for (const r of remoteNotes) {
+    if (!r || !r.id) continue;
+    if (!localMap.has(r.id)) {
+      result.push(r);
+    } else {
+      const local = localMap.get(r.id);
+      const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+      const remoteTime = r.updatedAt ? new Date(r.updatedAt).getTime() : 0;
+      if (remoteTime > localTime) {
+        Object.assign(local, r);
+      }
+    }
+  }
+  return result;
+}
+
 let pty;
 try {
   pty = require('node-pty');
@@ -807,7 +830,8 @@ function registerIpcHandlers() {
         config: getUserConfig(),
         profiles: loadJsonFile('ssh-profiles.json', []),
         sessions: loadJsonFile('sessions.json', {}),
-        tabTemplates: loadJsonFile('tab-templates.json', {})
+        tabTemplates: loadJsonFile('tab-templates.json', {}),
+        notes: loadJsonFile('notes.json', [])
       };
 
       fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2), 'utf-8');
@@ -878,6 +902,12 @@ function registerIpcHandlers() {
         const localTemplates = loadJsonFile('tab-templates.json', {});
         saveJsonFile('tab-templates.json', { ...data.tabTemplates, ...localTemplates });
       }
+      if (Array.isArray(data.notes)) {
+        const localNotes = loadJsonFile('notes.json', []);
+        const mergedNotes = mergeNotes(localNotes, data.notes);
+        saveJsonFile('notes.json', mergedNotes);
+        data.notes = mergedNotes;
+      }
 
       return {
         success: true,
@@ -886,7 +916,8 @@ function registerIpcHandlers() {
           config: data.config || null,
           profiles: data.profiles || null,
           sessions: data.sessions || null,
-          tabTemplates: data.tabTemplates || null
+          tabTemplates: data.tabTemplates || null,
+          notes: data.notes || null
         }
       };
     } catch (err) {
@@ -990,6 +1021,7 @@ function registerIpcHandlers() {
       let profiles = loadJsonFile('ssh-profiles.json', []);
       let sessions = loadJsonFile('sessions.json', {});
       let tabTemplates = loadJsonFile('tab-templates.json', {});
+      let notes = loadJsonFile('notes.json', []);
 
       // Fusionar siempre con lo que exista en Google Drive para garantizar que ningún perfil se pierda
       try {
@@ -1016,6 +1048,10 @@ function registerIpcHandlers() {
                 tabTemplates = { ...remoteData.tabTemplates, ...tabTemplates };
                 saveJsonFile('tab-templates.json', tabTemplates);
               }
+              if (Array.isArray(remoteData.notes)) {
+                notes = mergeNotes(notes, remoteData.notes);
+                saveJsonFile('notes.json', notes);
+              }
             }
           } catch (mergeErr) {
             console.warn('No se pudo fusionar el archivo remoto antes de subir:', mergeErr.message);
@@ -1034,6 +1070,7 @@ function registerIpcHandlers() {
         profiles,
         sessions,
         tabTemplates,
+        notes,
         deletedProfileIds: combinedDeletedIds
       };
 
@@ -1121,6 +1158,12 @@ function registerIpcHandlers() {
         const localTemplates = loadJsonFile('tab-templates.json', {});
         saveJsonFile('tab-templates.json', { ...data.tabTemplates, ...localTemplates });
       }
+      if (Array.isArray(data.notes)) {
+        const localNotes = loadJsonFile('notes.json', []);
+        const mergedNotes = mergeNotes(localNotes, data.notes);
+        saveJsonFile('notes.json', mergedNotes);
+        data.notes = mergedNotes;
+      }
 
       return {
         success: true,
@@ -1190,11 +1233,18 @@ function registerIpcHandlers() {
         const localTemplates = loadJsonFile('tab-templates.json', {});
         saveJsonFile('tab-templates.json', { ...data.tabTemplates, ...localTemplates });
       }
+      if (Array.isArray(data.notes)) {
+        const localNotes = loadJsonFile('notes.json', []);
+        const mergedNotes = mergeNotes(localNotes, data.notes);
+        saveJsonFile('notes.json', mergedNotes);
+        data.notes = mergedNotes;
+      }
 
       return {
         checked: true,
         updated: true,
         profiles: mergedProfiles,
+        notes: data.notes || null,
         remoteModifiedTime: remoteFile.modifiedTime
       };
     } catch (err) {
@@ -1223,6 +1273,7 @@ function registerIpcHandlers() {
       let localProfiles = loadJsonFile('ssh-profiles.json', []);
       let localSessions = loadJsonFile('sessions.json', {});
       let localTemplates = loadJsonFile('tab-templates.json', {});
+      let localNotes = loadJsonFile('notes.json', []);
 
       // 1. Comprobar si existe archivo en Google Drive y fusionar
       let combinedDeletedIds = config.cloudSync?.deletedProfileIds || [];
@@ -1250,6 +1301,10 @@ function registerIpcHandlers() {
               localTemplates = { ...remoteData.tabTemplates, ...localTemplates };
               saveJsonFile('tab-templates.json', localTemplates);
             }
+            if (Array.isArray(remoteData.notes)) {
+              localNotes = mergeNotes(localNotes, remoteData.notes);
+              saveJsonFile('notes.json', localNotes);
+            }
           }
         }
       } catch (remoteErr) {
@@ -1265,6 +1320,7 @@ function registerIpcHandlers() {
         profiles: localProfiles,
         sessions: localSessions,
         tabTemplates: localTemplates,
+        notes: localNotes,
         deletedProfileIds: combinedDeletedIds
       };
 
@@ -1816,6 +1872,118 @@ function registerIpcHandlers() {
     const templates = loadJsonFile('tab-templates.json', {});
     delete templates[name];
     return saveJsonFile('tab-templates.json', templates);
+  });
+
+  // Quick Notes (Bloc de notas rápido)
+  ipcMain.handle('notes:get', () => {
+    return loadJsonFile('notes.json', [
+      {
+        id: 'welcome',
+        title: 'Bienvenido',
+        content: '# Comandos y notas rápidas\n# Escribe aquí rutas, comandos o datos temporales.\n# Haz doble clic en la lista para copiar al instante.',
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+  });
+
+  ipcMain.handle('notes:save', (event, notes) => {
+    return saveJsonFile('notes.json', notes);
+  });
+
+  ipcMain.handle('notes:export', async () => {
+    try {
+      const notes = loadJsonFile('notes.json', []);
+      let defaultDir;
+      try {
+        defaultDir = app.getPath('downloads');
+      } catch (e) {
+        defaultDir = os.homedir();
+      }
+      const defaultPath = path.join(defaultDir || os.homedir(), 'notas.json');
+
+      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: 'Exportar notas',
+        defaultPath,
+        filters: [
+          { name: 'Archivos JSON (*.json)', extensions: ['json'] },
+          { name: 'Todos los archivos (*.*)', extensions: ['*'] }
+        ]
+      });
+
+      if (canceled || !filePath) return { success: false, canceled: true };
+      fs.writeFileSync(filePath, JSON.stringify(notes, null, 2), 'utf-8');
+      return { success: true, count: notes.length };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('notes:import', async () => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: 'Importar notas',
+        properties: ['openFile'],
+        filters: [
+          { name: 'JSON / Texto (*.json, *.txt, *.md)', extensions: ['json', 'txt', 'md'] },
+          { name: 'Todos los archivos (*.*)', extensions: ['*'] }
+        ]
+      });
+
+      if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
+      const filePath = filePaths[0];
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const currentNotes = loadJsonFile('notes.json', []);
+      const existingIds = new Set(currentNotes.map(n => n.id));
+      let added = 0;
+
+      // Intentar formato JSON
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item && typeof item === 'object' && item.content) {
+              let nid = item.id || `n_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+              if (existingIds.has(nid)) {
+                nid = `n_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+              }
+              const lines = String(item.content).split('\n').map(l => l.trim()).filter(Boolean);
+              const firstLine = lines.length > 0 ? lines[0].replace(/^#+\s*/, '') : '';
+              const title = item.title || (firstLine ? firstLine.slice(0, 40) : 'Nueva nota');
+              currentNotes.push({
+                id: nid,
+                title,
+                content: String(item.content),
+                updatedAt: item.updatedAt || new Date().toISOString()
+              });
+              existingIds.add(nid);
+              added++;
+            }
+          }
+          if (added > 0) {
+            saveJsonFile('notes.json', currentNotes);
+            return { success: true, count: added, notes: currentNotes };
+          }
+        }
+      } catch (e) {}
+
+      // Si no fue JSON o no tenía notas válidas, importar como nota de texto
+      if (raw.trim()) {
+        const filename = path.basename(filePath, path.extname(filePath)) || 'Nota importada';
+        const newNote = {
+          id: `n_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          title: filename,
+          content: raw,
+          updatedAt: new Date().toISOString()
+        };
+        currentNotes.push(newNote);
+        saveJsonFile('notes.json', currentNotes);
+        return { success: true, count: 1, notes: currentNotes };
+      }
+
+      return { success: false, error: 'El archivo está vacío o no contiene notas válidas.' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 
   // Application exit

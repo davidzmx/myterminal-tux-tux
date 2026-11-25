@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('api', {
   saveTabTemplate: (name, templateData) => ipcRenderer.invoke('tab-templates:save', { name, templateData }),
   deleteTabTemplate: (name) => ipcRenderer.invoke('tab-templates:delete', name),
 
+  // Quick Notes
+  getNotes: () => ipcRenderer.invoke('notes:get'),
+  saveNotes: (notes) => ipcRenderer.invoke('notes:save', notes),
+  exportNotes: () => ipcRenderer.invoke('notes:export'),
+  importNotes: () => ipcRenderer.invoke('notes:import'),
+
   // Google Drive Cloud Sync
   gdrive: {
     getStatus: () => ipcRenderer.invoke('gdrive:get-status'),
