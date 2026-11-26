@@ -73,6 +73,16 @@ Cada terminal abierta cuenta con una barra de herramientas completa:
 
 ---
 
+### 7. Bloc de Notas Rápidas (`📄 Notas`)
+- Panel desplegable flotante accesible desde la barra superior o con **`Ctrl + Shift + N`**.
+- **Auto-copiado instantáneo**: al seleccionar cualquier texto en el editor, se copia directamente al portapapeles.
+- **Doble clic en la lista**: copia el contenido de la nota al instante al portapapeles con confirmación visual.
+- **Búsqueda interactiva**: filtra notas o comandos con resaltado de coincidencias en tiempo real.
+- **Sincronización en la nube**: tus notas se respaldan y sincronizan cifradas automáticamente con Google Drive.
+- **Importar y Exportar**: compatible con archivos `.json`, `.txt` y `.md`.
+
+---
+
 ## ☁️ Guía de Sincronización en la Nube con Google Drive
 
 MyTerminal Tux Tux permite sincronizar en la nube todos tus **perfiles SSH**, **sesiones**, **plantillas de pestañas** y **configuraciones de botones** de forma automática y cifrada.
@@ -150,6 +160,7 @@ Puedes marcar las siguientes casillas para que la app trabaje en segundo plano:
 | `Ctrl + Shift + W` | **Cerrar** terminal activa (con confirmación si hay SSH) |
 | `Ctrl + Shift + C` | **Copiar** selección al portapapeles |
 | `Ctrl + Shift + V` / `Shift + Insert` | **Pegar** conservando el foco en la terminal |
+| `Ctrl + Shift + N` | Abrir / Cerrar el panel de **Notas Rápidas** |
 | `Esc` | Cerrar cualquier ventana modal activa y devolver foco a la consola |
 | `Click Central (Rueda)` | Pegar directamente en Linux |
 | `Click Derecho` | Abrir menú contextual de la terminal |

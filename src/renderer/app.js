@@ -1450,7 +1450,7 @@ class TuxTerminalApp {
       const info = await window.api.getSystemInfo();
       if (!info) return;
 
-      const appVer = info.version || '1.1.0';
+      const appVer = info.version || '2.0.0';
       const versionBadge = document.getElementById('about-version-badge');
       if (versionBadge) versionBadge.textContent = `v${appVer}`;
 
