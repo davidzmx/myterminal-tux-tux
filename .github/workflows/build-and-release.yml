@@ -126,13 +126,6 @@ jobs:
           path: dist/*.dmg
           archive: false
 
-      - name: Subir portable macOS .zip
-        if: matrix.platform == 'macos'
-        uses: actions/upload-artifact@v7
-        with:
-          path: dist/*.zip
-          archive: false
-
   release:
     name: Publish GitHub Release
     needs: build
@@ -152,18 +145,10 @@ jobs:
       - name: Display downloaded files
         run: ls -la dist-release
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist-release/*.AppImage
-            dist-release/*.deb
-            dist-release/*.exe
-            dist-release/*.dmg
-            dist-release/*.zip
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      - name: Create or Update GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes dist-release/* || \
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist-release/*
 
