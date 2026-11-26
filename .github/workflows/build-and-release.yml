@@ -56,7 +56,17 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools build-essential
+          sudo apt-get install -y libarchive-tools build-essential p7zip-full
+          mkdir -p ~/.cache/electron-builder/fpm
+          for i in 1 2 3; do
+            curl -fLsS --retry 5 --retry-delay 2 --retry-all-errors \
+              https://github.com/electron-userland/electron-builder-binaries/releases/download/fpm-1.9.3-2.3.1-linux-x86_64/fpm-1.9.3-2.3.1-linux-x86_64.7z \
+              -o /tmp/fpm.7z && break || sleep 3
+          done
+          if [ -f /tmp/fpm.7z ]; then
+            7z x -y -o"$HOME/.cache/electron-builder/fpm/fpm-1.9.3-2.3.1-linux-x86_64" /tmp/fpm.7z || true
+            rm -f /tmp/fpm.7z
+          fi
 
       - name: Setup MSVC C++ Compiler (Windows)
         if: runner.os == 'Windows'
@@ -68,7 +78,14 @@ jobs:
           GYP_MSVS_VERSION: '2022'
 
       - name: Build and package application
-        run: ${{ matrix.command }}
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            ${{ matrix.command }} && exit 0
+            echo "::warning::El empaquetado falló (posible error 504 o caída de red temporal). Reintentando en 10s..."
+            sleep 10
+          done
+          exit 1
         env:
           GYP_MSVS_VERSION: '2022'
           CSC_IDENTITY_AUTO_DISCOVERY: false
