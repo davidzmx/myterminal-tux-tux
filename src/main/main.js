@@ -171,10 +171,12 @@ function mergeNotes(localNotes = [], remoteNotes = []) {
 }
 
 let pty;
+let ptyLoadError = null;
 try {
   pty = require('node-pty');
 } catch (err) {
-  console.warn('node-pty could not be loaded directly:', err.message);
+  ptyLoadError = err;
+  console.error('node-pty could not be loaded directly:', err);
 }
 
 let mainWindow = null;
@@ -1363,7 +1365,8 @@ function registerIpcHandlers() {
   // PTY: Create terminal process
   ipcMain.handle('terminal:create', async (event, { id, cols = 80, rows = 24, cwd, shellPath, initialCommand }) => {
     if (!pty) {
-      throw new Error('node-pty is not installed or available on this system.');
+      const detail = ptyLoadError ? ` (${ptyLoadError.message})` : '';
+      throw new Error(`node-pty is not installed or available on this system${detail}`);
     }
 
     const config = getUserConfig();

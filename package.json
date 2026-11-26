@@ -48,6 +48,9 @@
       "src/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "**/node-pty/**/*"
+    ],
     "linux": {
       "target": [
         "AppImage",
